@@ -1,8 +1,8 @@
-# SessionSync
+# Codex Claude Session Sync
 
 [English](README.md) · **繁體中文** · [简体中文](README.zh-CN.md)
 
-喺 macOS 上將 **Claude Code** 同 **OpenAI Codex** 嘅對話雙向同步，感覺就好似遊戲嘅雲端存檔：每個對話兩邊都有一份，SessionSync 顯示邊一邊最後編輯過，並將較新嘅回合推去另一邊。無論你下一次打開邊個工具，都會係最新狀態。
+喺 macOS 上將 **Claude Code** 同 **OpenAI Codex** 嘅對話雙向同步，感覺就好似遊戲嘅雲端存檔：每個對話兩邊都有一份，Codex Claude Session Sync 顯示邊一邊最後編輯過，並將較新嘅回合推去另一邊。無論你下一次打開邊個工具，都會係最新狀態。
 
 - 雙向、只追加嘅同步：一邊嘅新回合會轉換格式並追加到另一邊，唔會改寫任何現有內容。
 - 雲端存檔式列表：標題、項目、兩邊嘅最後編輯時間、回合數，以及狀態標籤（`已同步`、`Claude → Codex 2`、`Codex → Claude 1`、`衝突`）。
@@ -16,16 +16,16 @@
 
 ## 安裝
 
-1. 去 [Releases](../../releases) 下載 `SessionSync-<version>.zip` 並解壓。
-2. App 係 ad-hoc 簽名、未經 notarize。第一次打開要右鍵 app → **打開** → **打開**（或者 `xattr -d com.apple.quarantine SessionSync.app`）。
+1. 去 [Releases](../../releases) 下載 `Codex-Claude-Session-Sync-<version>.zip` 並解壓。
+2. App 係 ad-hoc 簽名、未經 notarize。第一次打開要右鍵 app → **打開** → **打開**（或者 `xattr -d com.apple.quarantine "Codex Claude Session Sync.app"`）。
 3. 需要 PATH 上有 `python3`（Homebrew 或 Xcode Command Line Tools）。引擎只用 Python 標準庫。
 
 或者自行編譯：
 
 ```bash
 brew install xcodegen
-git clone https://github.com/Chamotrans/SessionSync.git
-cd SessionSync && ./build.sh
+git clone https://github.com/Chamotrans/codex-claude-session-sync.git
+cd codex-claude-session-sync && ./build.sh
 ```
 
 `build.sh` 會生成 Xcode project、編譯、清走令 Xcode 簽名步驟失敗嘅 `com.apple.provenance` 屬性、ad-hoc 簽名並啟動 app。

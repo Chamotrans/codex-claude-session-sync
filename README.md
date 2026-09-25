@@ -1,8 +1,8 @@
-# SessionSync
+# Codex Claude Session Sync
 
 **English** · [繁體中文](README.zh-HK.md) · [简体中文](README.zh-CN.md)
 
-Keep your coding-agent conversations in sync between **Claude Code** and **OpenAI Codex** on macOS, the way a game syncs its cloud saves. Every conversation can live in both tools; SessionSync shows which side was edited last and pushes the newer turns across, so whichever app you open next already has the latest state.
+Keep your coding-agent conversations in sync between **Claude Code** and **OpenAI Codex** on macOS, the way a game syncs its cloud saves. Every conversation can live in both tools; Codex Claude Session Sync shows which side was edited last and pushes the newer turns across, so whichever app you open next already has the latest state.
 
 - Two-way, append-only sync: new turns from one side are converted and appended to the other. Nothing is rewritten.
 - Cloud-save style list: title, project, last edit time on each side, turn counts, and a status pill (`In sync`, `Claude → Codex 2`, `Codex → Claude 1`, `Conflict`).
@@ -16,16 +16,16 @@ Keep your coding-agent conversations in sync between **Claude Code** and **OpenA
 
 ## Install
 
-1. Download `SessionSync-<version>.zip` from [Releases](../../releases) and unzip.
-2. The app is ad-hoc signed, not notarized. On first launch, right-click the app → **Open** → **Open** (or `xattr -d com.apple.quarantine SessionSync.app`).
+1. Download `Codex-Claude-Session-Sync-<version>.zip` from [Releases](../../releases) and unzip.
+2. The app is ad-hoc signed, not notarized. On first launch, right-click the app → **Open** → **Open** (or `xattr -d com.apple.quarantine "Codex Claude Session Sync.app"`).
 3. Requires `python3` on your PATH (Homebrew or Xcode Command Line Tools). The engine uses only the Python standard library.
 
 Or build from source:
 
 ```bash
 brew install xcodegen
-git clone https://github.com/Chamotrans/SessionSync.git
-cd SessionSync && ./build.sh
+git clone https://github.com/Chamotrans/codex-claude-session-sync.git
+cd codex-claude-session-sync && ./build.sh
 ```
 
 `build.sh` generates the Xcode project, builds, strips the `com.apple.provenance` attributes that make Xcode's own codesign step fail, ad-hoc signs the app and launches it.

@@ -30,8 +30,8 @@ targets:
     info:
       path: Resources/Info.plist
       properties:
-        CFBundleName: SessionSync
-        CFBundleDisplayName: SessionSync
+        CFBundleName: Codex Claude Session Sync
+        CFBundleDisplayName: Codex Claude Session Sync
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
@@ -40,5 +40,6 @@ targets:
         NSHighResolutionCapable: true
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.chamotrans.sessionsync
-      PRODUCT_NAME: SessionSync
+      PRODUCT_NAME: Codex Claude Session Sync
+      PRODUCT_MODULE_NAME: SessionSync
       GENERATE_INFOPLIST_FILE: "NO"

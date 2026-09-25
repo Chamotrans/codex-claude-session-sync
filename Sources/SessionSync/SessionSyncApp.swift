@@ -5,7 +5,7 @@ struct SessionSyncApp: App {
     @StateObject private var store = SyncStore()
 
     var body: some Scene {
-        WindowGroup("SessionSync") {
+        WindowGroup("Codex Claude Session Sync") {
             ContentView()
                 .environmentObject(store)
                 .frame(minWidth: 980, minHeight: 560)

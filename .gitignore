@@ -1,0 +1,16 @@
+# Xcode / xcodegen output
+build/
+*.xcodeproj/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Python
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# Release artefacts
+dist/

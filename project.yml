@@ -1,0 +1,44 @@
+name: SessionSync
+options:
+  bundleIdPrefix: com.chamotrans
+  developmentLanguage: en
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+settings:
+  MARKETING_VERSION: "1.0.0"
+  CURRENT_PROJECT_VERSION: "1"
+  SWIFT_VERSION: "5.0"
+  CODE_SIGN_IDENTITY: "-"
+  CODE_SIGNING_REQUIRED: "NO"
+  CODE_SIGN_STYLE: Manual
+  DEVELOPMENT_TEAM: ""
+  ENABLE_APP_SANDBOX: "NO"
+  ENABLE_HARDENED_RUNTIME: "NO"
+targets:
+  SessionSync:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/SessionSync
+      - path: engine
+        type: folder
+        buildPhase: resources
+        excludes:
+          - "__pycache__"
+          - "*.pyc"
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleName: SessionSync
+        CFBundleDisplayName: SessionSync
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        NSHumanReadableCopyright: ""
+        LSApplicationCategoryType: public.app-category.developer-tools
+        NSHighResolutionCapable: true
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.chamotrans.sessionsync
+      PRODUCT_NAME: SessionSync
+      GENERATE_INFOPLIST_FILE: "NO"

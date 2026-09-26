@@ -11,6 +11,15 @@ fixture-based test suite + CI, make the public build robust, and localize the UI
 - Do not launch the app (it bootstraps on appear). Build with plain `xcodebuild`.
 
 ## Waiting for the owner
+- **15 Claude-origin sessions carry a wrong "[Codex] " title** (my fault: the first `retitle` run on 2026-09-25 ran
+  over every pair before it was limited to Codex-origin pairs). Examples: "Capturela 應用架構規劃",
+  "opencodex repository", "Hermes Skill 部署方法". Two also have the wrong title in the Claude desktop sidebar.
+  Preview and fix (writes one title line per session + 2 sidebar entries; restart the Claude app afterwards):
+  `python3 engine/sessionsync.py fix-titles` (dry run) then `python3 engine/sessionsync.py fix-titles --apply`.
+- **Codex auto-import setting.** `~/.codex/config.toml` has `external-agent-import-sync-enabled = true`. Every Claude
+  copy this app makes of a Codex thread will be imported back once (one batch of 36 on 2026-09-26 07:35; no file was
+  imported twice, so it is one echo per copy, not one per change). Options: leave it (echoes are hidden under
+  "Re-imports"), or set it to `false` so this app is the only bridge.
 - **Echo duplicates in Codex (36 threads).** Codex Desktop auto-imported the 111 Codex-derived Claude sessions
   back into Codex (`external_agent_session_imports.json` now has 36 records whose source is a `019…`/`01a…`
   Claude file). They show up as unpaired "[Codex] …" threads. Clean-up (archive them in Codex) needs your OK.
@@ -87,3 +96,15 @@ fixture-based test suite + CI, make the public build robust, and localize the UI
   with the SF Symbol `arrow.triangle.2.circlepath.icloud.fill`. All 10 mac sizes in
   `Resources/Assets.xcassets/AppIcon.appiconset`; `AppIcon.icns` + `Assets.car` now ship in the bundle.
 - Backlog 1–5 done. Next: polish/review passes.
+
+### 2026-09-27 — iteration 6: review follow-ups
+- Read-only check of Codex's import records: 86 records, no source imported twice, the 36 echoes arrived in one batch.
+  Echoes are a one-off per Claude copy, not a leak per sync. README (3 languages) now explains re-imports and the
+  `external-agent-import-sync-enabled` switch.
+- Read-only audit found the retitle damage listed at the top. New `fix-titles` (dry run by default, `--apply` to write)
+  only touches titles this engine wrote or that Claude copied back verbatim; restores Claude's earlier title, else
+  drops the prefix. 5 fixture tests. Dry run on real data lists exactly the 15 sessions. **Not applied.**
+- CI: macOS job now also runs the tests under `/usr/bin/python3` (3.9). `FakeHome.pair()` raises a descriptive
+  assertion instead of `StopIteration` (likely source of the one-off 3.9 ERROR). 28 tests pass on 3.9 and 3.13.
+- READMEs document Re-imports, `recreate` and `fix-titles`.
+- Draft PR opened from this branch; not merged. Loop stopped: backlog done, remaining items need the owner.

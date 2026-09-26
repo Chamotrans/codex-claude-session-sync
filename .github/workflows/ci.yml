@@ -20,6 +20,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Engine tests on the macOS system Python (the fallback most users get)
+        run: /usr/bin/python3 --version && /usr/bin/python3 -m unittest discover -s engine/tests -v
       - name: Install xcodegen
         run: brew install xcodegen
       - name: Generate project

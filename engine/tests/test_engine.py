@@ -234,5 +234,54 @@ class MissingTests(EngineTestCase):
         self.assertEqual(self.h.pair(self.h.scan(), sid)["status"], "in_sync")
 
 
+class TitleTests(EngineTestCase):
+    def test_retitle_only_touches_codex_origin(self):
+        did = self.h.codex_thread([("hi", "hello")], name="Generated name")
+        self.h.run("create", "--from", "codex", "--id", did)
+        cid = self.h.claude_session([("claude first", "ok")], title="Claude's own title")
+        cdx = self.h.codex_thread([("claude first", "ok")], name="Codex generated")
+        self.h.codex_import_record(cid, cdx)
+        self.h.run("bootstrap")
+        out = self.h.run("retitle")
+        self.assertEqual([i["id"] for i in out["items"]], [did])
+
+    def test_fix_titles_restores_claude_title(self):
+        cid = self.h.claude_session([("claude first", "ok")], title="Claude's own title")
+        cdx = self.h.codex_thread([("claude first", "ok")], name="Codex generated")
+        self.h.codex_import_record(cid, cdx)
+        self.h.run("bootstrap")
+        self.h.register_desktop(cid, title="[Codex] Codex generated")
+        # what the early, unrestricted retitle wrote
+        with open(self.h.claude_path(cid), "a") as f:
+            f.write(json.dumps({"type": "custom-title", "customTitle": "[Codex] Codex generated", "sessionId": cid}, ensure_ascii=False) + "\n")
+        dry = self.h.run("fix-titles")
+        self.assertEqual((dry["count"], dry["applied"]), (1, False))
+        self.assertEqual(dry["fixes"][0]["to"], "Claude's own title")
+        self.assertEqual(self.h.pair(self.h.scan(), cid)["claude"]["title"], "[Codex] Codex generated")  # dry run wrote nothing
+        self.h.run("fix-titles", "--apply")
+        self.assertEqual(self.h.pair(self.h.scan(), cid)["claude"]["title"], "Claude's own title")
+        reg = [json.load(open(os.path.join(self.h.desktop_dir, f))) for f in os.listdir(self.h.desktop_dir)]
+        self.assertEqual(reg[0]["title"], "Claude's own title")
+        self.assertEqual(self.h.run("fix-titles")["count"], 0)   # idempotent
+
+    def test_fix_titles_handles_claude_copying_the_bad_title_back(self):
+        cid = self.h.claude_session([("<command-name>/login</command-name>", "ok")])
+        cdx = self.h.codex_thread([("x", "y")], name="Nice name")
+        self.h.codex_import_record(cid, cdx)
+        self.h.run("bootstrap")
+        with open(self.h.claude_path(cid), "a") as f:
+            f.write(json.dumps({"type": "custom-title", "customTitle": "[Codex] Nice name", "sessionId": cid}, ensure_ascii=False) + "\n")
+            f.write(json.dumps({"type": "custom-title", "customTitle": "[Codex] Nice name", "sessionId": cid}, separators=(",", ":")) + "\n")
+        out = self.h.run("fix-titles")
+        self.assertEqual(out["count"], 1)
+        self.assertEqual(out["fixes"][0]["to"], "Nice name")   # no prior Claude title: drop the prefix, not the raw prompt
+
+    def test_fix_titles_ignores_titles_claude_wrote(self):
+        cid = self.h.claude_session([("x", "y")])
+        with open(self.h.claude_path(cid), "a") as f:
+            f.write(json.dumps({"type": "custom-title", "customTitle": "[Codex] user chose this", "sessionId": cid}, separators=(",", ":")) + "\n")
+        self.assertEqual(self.h.run("fix-titles")["count"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -17,6 +17,7 @@ CLI (all output is JSON unless --pretty):
   sessionsync.py register --id CLAUDE_ID               add a CLI session to the Claude desktop app sidebar
   sessionsync.py register-all [--all]                  add Codex-derived (or, with --all, every) CLI session to the sidebar
   sessionsync.py recreate --pair ID                    rebuild the missing side of a pair from the surviving side
+  sessionsync.py fix-titles [--apply]                  undo "[Codex] " titles wrongly put on Claude-origin sessions (dry run by default)
   sessionsync.py retitle                               use Codex's generated titles for Codex-derived Claude sessions
 """
 import argparse, glob, json, os, re, sqlite3, sys, time, uuid, datetime, subprocess, collections
@@ -438,6 +439,62 @@ def codex_titles():
     except Exception:
         pass
     return out
+
+
+ENGINE_TITLE_PREFIX = '{"type": "custom-title", "customTitle": '   # json.dumps default separators; Claude writes compact JSON
+
+
+def fix_titles(claude, state, apply=False):
+    """Undo "[Codex] …" titles that an early `retitle` wrote onto sessions that actually started in Claude.
+    Only titles written by this engine (recognisable by its JSON formatting) are touched. The restored title is
+    the last title Claude itself set before ours, else the first prompt. Dry run unless apply=True."""
+    codex_origin = {p["claude_id"] for p in state["pairs"].values() if p.get("origin") in ("bootstrap_same_id", "created_claude")}
+    d = claude_desktop_dir()
+    reg = {}
+    if d:
+        for f in glob.glob(os.path.join(d, "local_*.json")):
+            o = load_json(f, {})
+            if o.get("cliSessionId"):
+                reg[o["cliSessionId"]] = (f, o)
+    fixes = []
+    for s in claude:
+        if s["id"] in codex_origin:
+            continue
+        before, last_title, engine_titles, seen_engine = None, None, set(), False
+        with open(s["path"], errors="replace") as fh:
+            for line in fh:
+                if '"custom-title"' not in line:
+                    continue
+                try:
+                    o = json.loads(line)
+                except Exception:
+                    continue
+                if o.get("type") != "custom-title":
+                    continue
+                t = o.get("customTitle") or ""
+                if line.startswith(ENGINE_TITLE_PREFIX):
+                    engine_titles.add(t)
+                    seen_engine = True
+                elif not seen_engine:
+                    before = t          # Claude's own title from before the engine touched this session
+                last_title = t
+        # Fix when the current title is an engine-written "[Codex] …" title, or Claude copied it back verbatim.
+        if not last_title or not last_title.startswith("[Codex] ") or last_title not in engine_titles:
+            continue
+        restored = before or last_title[len("[Codex] "):]
+        fix = {"id": s["id"], "from": last_title, "to": restored, "registry": False}
+        if s["id"] in reg and (reg[s["id"]][1].get("title") or "").startswith("[Codex] "):
+            fix["registry"] = True
+        fixes.append(fix)
+        if apply:
+            with open(s["path"], "a") as w:
+                w.write(json.dumps({"type": "custom-title", "customTitle": restored, "sessionId": s["id"]}, separators=(",", ":"),
+                                   ensure_ascii=False) + "\n")
+            if fix["registry"]:
+                f, o = reg[s["id"]]
+                o["title"] = restored[:120]
+                save_json(f, o)
+    return fixes
 
 
 def retitle_claude_desktop(claude, state, pairs_only=True):
@@ -910,11 +967,12 @@ def do_sync(state, pair_id, claude, codex, prefer="both", force=False):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["scan", "bootstrap", "sync", "sync-all", "create", "link", "unlink", "ignore", "open",
-                                    "register", "register-all", "retitle", "recreate"])
+                                    "register", "register-all", "retitle", "recreate", "fix-titles"])
     ap.add_argument("--pair"); ap.add_argument("--prefer", default="ask", choices=["ask", "claude", "codex", "both"])
     ap.add_argument("--from", dest="src", choices=["claude", "codex"]); ap.add_argument("--id")
     ap.add_argument("--claude"); ap.add_argument("--codex"); ap.add_argument("--side", choices=["claude", "codex"])
     ap.add_argument("--force", action="store_true"); ap.add_argument("--pretty", action="store_true")
+    ap.add_argument("--apply", action="store_true", help="fix-titles: write the fixes (default is a dry run)")
     ap.add_argument("--all", action="store_true", help="register-all: include sessions that did not come from Codex")
     a = ap.parse_args()
 
@@ -999,6 +1057,9 @@ def main():
                 if lid:
                     done.append(s["id"])
             out = {"registered": len(done), "ids": done}
+        elif a.cmd == "fix-titles":
+            fixes = fix_titles(claude, state, apply=a.apply)
+            out = {"applied": a.apply, "count": len(fixes), "fixes": fixes}
         elif a.cmd == "recreate":
             out = recreate_missing(state, a.pair, claude, codex)
             save_json(STATE_FILE, state)

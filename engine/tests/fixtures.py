@@ -84,7 +84,8 @@ class FakeHome:
         self._write_claude_turns(path, sid, cwd, turns, parent=None, t0=0)
         if title:
             with open(path, "a") as f:
-                f.write(json.dumps({"type": "custom-title", "customTitle": title, "sessionId": sid}) + "\n")
+                # Claude Code writes compact JSON; the engine's own title lines use default separators.
+                f.write(json.dumps({"type": "custom-title", "customTitle": title, "sessionId": sid}, separators=(",", ":")) + "\n")
         os.utime(path, (OLD, OLD))
         return sid
 
@@ -220,7 +221,10 @@ class FakeHome:
         return self.run("scan")
 
     def pair(self, view, pair_id):
-        return next(p for p in view["pairs"] if p["pair_id"] == pair_id)
+        for p in view["pairs"]:
+            if p["pair_id"] == pair_id:
+                return p
+        raise AssertionError("pair %s not in view; pairs=%s" % (pair_id, [p["pair_id"] for p in view["pairs"]]))
 
     def age_all(self):
         """Push every session file's mtime into the past (the engine refuses to touch just-written files)."""

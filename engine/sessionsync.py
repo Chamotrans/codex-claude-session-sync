@@ -378,13 +378,13 @@ CLAUDE_DESKTOP_ROOT = os.path.join(HOME, "Library", "Application Support", "Clau
 
 def claude_desktop_dir():
     """The account folder the Claude desktop app is currently using (the one with the newest local_*.json)."""
-    best, best_m = None, -1
+    best, best_m = None, None
     for d in glob.glob(os.path.join(CLAUDE_DESKTOP_ROOT, "*", "*")):
         if not os.path.isdir(d):
             continue
         files = glob.glob(os.path.join(d, "local_*.json"))
-        m = max([os.stat(f).st_mtime for f in files], default=-1)
-        if m > best_m:
+        m = max([os.stat(f).st_mtime for f in files], default=os.stat(d).st_mtime - 1e9)
+        if best_m is None or m > best_m:
             best, best_m = d, m
     return best
 
@@ -807,20 +807,20 @@ def do_sync(state, pair_id, claude, codex, prefer="both", force=False):
     push_c2d = st == "claude_newer" or (st == "conflict" and prefer in ("claude", "both"))
     push_d2c = st == "codex_newer" or (st == "conflict" and prefer in ("codex", "both"))
     active_c, active_d = claude_active_ids(), codex_active_ids()
-    if push_c2d:
-        if not force and (cd["id"] in active_d or recently_written(cd["path"])):
-            raise RuntimeError("Codex thread is open or was just written; try again later")
-        turns = claude_turns(cs["path"])[p["synced_claude_turns"]:]
-        if turns:
-            append_to_codex(cd, turns)
-            result["pushed_to_codex"] = len(turns)
-    if push_d2c:
-        if not force and (cs["id"] in active_c or recently_written(cs["path"])):
-            raise RuntimeError("Claude session is open or was just written; try again later")
-        turns = codex_turns(cd["id"])[p["synced_codex_turns"]:]
-        if turns:
-            append_to_claude(cs, turns)
-            result["pushed_to_claude"] = len(turns)
+    # Check both guards and read both deltas BEFORE writing anything, so a merge never echoes
+    # the turns it just appended to one side back into the other.
+    if push_c2d and not force and (cd["id"] in active_d or recently_written(cd["path"])):
+        raise RuntimeError("Codex thread is open or was just written; try again later")
+    if push_d2c and not force and (cs["id"] in active_c or recently_written(cs["path"])):
+        raise RuntimeError("Claude session is open or was just written; try again later")
+    c2d_turns = claude_turns(cs["path"])[p["synced_claude_turns"]:] if push_c2d else []
+    d2c_turns = codex_turns(cd["id"])[p["synced_codex_turns"]:] if push_d2c else []
+    if c2d_turns:
+        append_to_codex(cd, c2d_turns)
+        result["pushed_to_codex"] = len(c2d_turns)
+    if d2c_turns:
+        append_to_claude(cs, d2c_turns)
+        result["pushed_to_claude"] = len(d2c_turns)
     # re-count both sides after writing
     p["synced_claude_turns"] = parse_claude_file(cs["path"])["turns"]
     p["synced_codex_turns"] = sum(parse_codex_segment(f)["turns"] for f in codex_segments(cd["id"]))

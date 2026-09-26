@@ -33,6 +33,13 @@ enum PairStatus: String, Codable, CaseIterable {
     case conflict
     case missing
     case rebased
+    case unknown
+
+    /// Unknown values from a newer engine decode as `.unknown` instead of failing the whole scan.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = PairStatus(rawValue: raw) ?? .unknown
+    }
 
     var label: String {
         switch self {
@@ -42,6 +49,7 @@ enum PairStatus: String, Codable, CaseIterable {
         case .conflict: return "衝突"
         case .missing: return "缺少一邊"
         case .rebased: return "需重設基準"
+        case .unknown: return "未知"
         }
     }
 
@@ -53,6 +61,7 @@ struct PairInfo: Codable, Identifiable, Hashable {
     var status: PairStatus
     var claude: SessionInfo?
     var codex: SessionInfo?
+    var missingSide: String?
     var syncedClaudeTurns: Int
     var syncedCodexTurns: Int
     var lastSync: String?

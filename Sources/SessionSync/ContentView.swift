@@ -237,7 +237,10 @@ struct StatusPill: View {
             case .claudeNewer: return ("Claude → Codex \(p.claudeNewTurns)", .orange, "arrow.right.circle.fill")
             case .codexNewer: return ("Codex → Claude \(p.codexNewTurns)", .orange, "arrow.left.circle.fill")
             case .conflict: return ("衝突 \(p.claudeNewTurns)/\(p.codexNewTurns)", .red, "exclamationmark.triangle.fill")
-            case .missing: return ("缺少一邊", .gray, "questionmark.circle")
+            case .missing:
+                let side = p.missingSide == "codex" ? "Codex" : (p.missingSide == "claude" ? "Claude" : "兩邊")
+                return ("\(side) 已刪除", .gray, "questionmark.circle")
+            case .unknown: return ("未知", .gray, "questionmark.circle")
             case .rebased: return ("需重設", .gray, "arrow.counterclockwise.circle")
             }
         case .only(let s):
@@ -259,6 +262,9 @@ struct ActionButton: View {
                 Button("同步") { store.syncPair(p) }.disabled(store.isBusy)
             case .conflict:
                 Button("解決") { store.pendingConflict = p }.disabled(store.isBusy)
+            case .missing where p.missingSide == "claude" || p.missingSide == "codex":
+                Button("重建") { store.recreate(p) }.disabled(store.isBusy)
+                    .help("由仲存在嗰邊重新建立被刪除嗰邊")
             default:
                 EmptyView()
             }

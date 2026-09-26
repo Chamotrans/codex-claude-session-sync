@@ -16,6 +16,7 @@ CLI (all output is JSON unless --pretty):
   sessionsync.py open --side claude|codex --id ID      print the command to resume that session
   sessionsync.py register --id CLAUDE_ID               add a CLI session to the Claude desktop app sidebar
   sessionsync.py register-all [--all]                  add Codex-derived (or, with --all, every) CLI session to the sidebar
+  sessionsync.py recreate --pair ID                    rebuild the missing side of a pair from the surviving side
   sessionsync.py retitle                               use Codex's generated titles for Codex-derived Claude sessions
 """
 import argparse, glob, json, os, re, sqlite3, sys, time, uuid, datetime, subprocess, collections
@@ -782,7 +783,8 @@ def build_view(state, claude, codex):
             cs["imported"] = True
         paired_c.add(p["claude_id"]); paired_d.add(p["codex_id"])
         st = pair_status(p, cs, cd)
-        pairs.append({"pair_id": pid, "status": st, "claude": cs, "codex": cd,
+        missing_side = None if st != "missing" else ("both" if cs is None and cd is None else ("claude" if cs is None else "codex"))
+        pairs.append({"pair_id": pid, "status": st, "claude": cs, "codex": cd, "missing_side": missing_side,
                       "synced_claude_turns": p.get("synced_claude_turns", 0), "synced_codex_turns": p.get("synced_codex_turns", 0),
                       "last_sync": p.get("last_sync"), "origin": p.get("origin"),
                       "claude_active": p["claude_id"] in active_c, "codex_active": p["codex_id"] in active_d,
@@ -832,6 +834,30 @@ def bootstrap(state, claude, codex):
             paired_c.add(cid); paired_d.add(did)
             added += 1
     return added
+
+
+def recreate_missing(state, pair_id, claude, codex):
+    """A pair lost one side (thread deleted in Codex, or session file removed in Claude): rebuild that side
+    from the surviving one and point the pair at the new copy."""
+    p = state["pairs"].get(pair_id)
+    if not p:
+        raise RuntimeError("unknown pair " + pair_id)
+    cs = next((s for s in claude if s["id"] == p["claude_id"]), None)
+    cd = next((s for s in codex if s["id"] == p["codex_id"]), None)
+    if cs and cd:
+        raise RuntimeError("both sides exist; nothing to recreate")
+    if not cs and not cd:
+        raise RuntimeError("both sides are gone; unlink this pair instead")
+    del state["pairs"][pair_id]
+    try:
+        if cs:
+            path = create_codex_from_claude(cs, state)
+            return {"recreated": "codex", "path": path, "pair_id": cs["id"]}
+        path = create_claude_from_codex(cd, state)
+        return {"recreated": "claude", "path": path, "pair_id": cd["id"]}
+    except Exception:
+        state["pairs"][pair_id] = p      # leave the pair as it was
+        raise
 
 
 def do_sync(state, pair_id, claude, codex, prefer="both", force=False):
@@ -884,7 +910,7 @@ def do_sync(state, pair_id, claude, codex, prefer="both", force=False):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["scan", "bootstrap", "sync", "sync-all", "create", "link", "unlink", "ignore", "open",
-                                    "register", "register-all", "retitle"])
+                                    "register", "register-all", "retitle", "recreate"])
     ap.add_argument("--pair"); ap.add_argument("--prefer", default="ask", choices=["ask", "claude", "codex", "both"])
     ap.add_argument("--from", dest="src", choices=["claude", "codex"]); ap.add_argument("--id")
     ap.add_argument("--claude"); ap.add_argument("--codex"); ap.add_argument("--side", choices=["claude", "codex"])
@@ -973,6 +999,9 @@ def main():
                 if lid:
                     done.append(s["id"])
             out = {"registered": len(done), "ids": done}
+        elif a.cmd == "recreate":
+            out = recreate_missing(state, a.pair, claude, codex)
+            save_json(STATE_FILE, state)
         elif a.cmd == "retitle":
             ch = retitle_claude_desktop(claude, state)
             out = {"retitled": len(ch), "items": [{"id": i, "title": t} for i, t in ch]}

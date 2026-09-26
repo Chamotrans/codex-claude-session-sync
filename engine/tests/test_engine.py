@@ -191,5 +191,48 @@ class EchoTests(EngineTestCase):
         self.assertIn("counterpart", out["error"])
 
 
+class MissingTests(EngineTestCase):
+    def test_codex_deleted_reports_side_and_recreates(self):
+        cid = self.h.claude_session([("hi", "hello"), ("more", "ok")])
+        did = self.h.codex_thread([("hi", "hello"), ("more", "ok")])
+        self.h.codex_import_record(cid, did)
+        self.h.run("bootstrap")
+        self.h.delete_codex_thread(did)
+        p = self.h.pair(self.h.scan(), cid)
+        self.assertEqual((p["status"], p["missing_side"]), ("missing", "codex"))
+        out = self.h.run("recreate", "--pair", cid)
+        self.assertEqual(out["recreated"], "codex")
+        p = self.h.pair(self.h.scan(), cid)
+        self.assertEqual(p["status"], "in_sync")
+        self.assertEqual(p["codex"]["turns"], 2)
+
+    def test_claude_deleted_recreates_from_codex(self):
+        did = self.h.codex_thread([("hi", "hello")])
+        cid = self.h.claude_session([("hi", "hello")])
+        self.h.codex_import_record(cid, did)
+        self.h.run("bootstrap")
+        os.remove(self.h.claude_path(cid))
+        p = self.h.pair(self.h.scan(), cid)
+        self.assertEqual(p["missing_side"], "claude")
+        out = self.h.run("recreate", "--pair", cid)
+        self.assertEqual(out["recreated"], "claude")
+        v = self.h.scan()
+        self.assertEqual(v["totals"]["pairs"], 1)
+        self.assertEqual(self.h.pair(v, did)["status"], "in_sync")
+
+    def test_recreate_refuses_when_both_exist(self):
+        sid = self.h.claude_session([("hi", "hello")])
+        self.h.codex_thread([("hi", "hello")], sid=sid)
+        self.h.run("bootstrap")
+        out = self.h.run("recreate", "--pair", sid, ok=False)
+        self.assertIn("nothing to recreate", out["error"])
+
+    def test_archived_codex_thread_is_not_missing(self):
+        sid = self.h.claude_session([("hi", "hello")])
+        self.h.codex_thread([("hi", "hello")], sid=sid, archived=True)
+        self.h.run("bootstrap")
+        self.assertEqual(self.h.pair(self.h.scan(), sid)["status"], "in_sync")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -77,7 +77,13 @@ struct DetailView: View {
         case .claudeNewer: return "Claude 有 \(p.claudeNewTurns) 個新回合未推去 Codex"
         case .codexNewer: return "Codex 有 \(p.codexNewTurns) 個新回合未推去 Claude"
         case .conflict: return "兩邊都有新回合（Claude \(p.claudeNewTurns)、Codex \(p.codexNewTurns)）"
-        case .missing: return "其中一邊搵唔到檔案"
+        case .missing:
+            switch p.missingSide {
+            case "codex": return "Codex 嗰邊嘅 thread 已被刪除。可以由 Claude 重建，或者解除配對。"
+            case "claude": return "Claude 嗰邊嘅 session 已被刪除。可以由 Codex 重建，或者解除配對。"
+            default: return "兩邊都搵唔到，建議解除配對。"
+            }
+        case .unknown: return "引擎回報咗一個新狀態，請更新 app。"
         case .rebased: return "有一邊嘅回合數少過基準，同步時會重設"
         }
     }
@@ -101,6 +107,10 @@ struct DetailView: View {
                     Button("解決衝突…") { store.pendingConflict = p }.buttonStyle(.borderedProminent)
                 } else if p.status.needsAction {
                     Button("立即同步") { store.syncPair(p) }.buttonStyle(.borderedProminent)
+                }
+                if p.status == .missing && (p.missingSide == "claude" || p.missingSide == "codex") {
+                    Button("重建 \(p.missingSide == "codex" ? "Codex" : "Claude") 副本") { store.recreate(p) }
+                        .buttonStyle(.borderedProminent)
                 }
                 Button("解除配對") { store.unlink(p) }
             case .only(let s) where s.isEcho:

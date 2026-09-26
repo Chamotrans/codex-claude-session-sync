@@ -151,6 +151,15 @@ final class SyncStore: ObservableObject {
         }
     }
 
+    func recreate(_ pair: PairInfo) {
+        perform("重建缺少嘅一邊…") { [self] in
+            let r = try await Engine.shared.recreate(pair: pair.pairId)
+            scan = try await Engine.shared.scan()
+            lastRefresh = Date()
+            return "已喺 \(r.recreated == "codex" ? "Codex" : "Claude") 重建：\(pair.title)"
+        }
+    }
+
     func ignore(_ session: SessionInfo) {
         perform("隱藏…") { [self] in
             try await Engine.shared.ignore(side: session.side, id: session.id)

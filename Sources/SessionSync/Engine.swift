@@ -104,6 +104,12 @@ final class Engine {
         try decode(CreateResult.self, try await run(["create", "--from", side, "--id", id]))
     }
 
+    struct RecreateResult: Decodable { var recreated: String; var pairId: String }
+
+    func recreate(pair: String) async throws -> RecreateResult {
+        try decode(RecreateResult.self, try await run(["recreate", "--pair", pair]))
+    }
+
     func link(claude: String, codex: String) async throws {
         _ = try await run(["link", "--claude", claude, "--codex", codex])
     }

@@ -48,3 +48,12 @@ fixture-based test suite + CI, make the public build robust, and localize the UI
   excluded from "只有 Codex", auto-create and bootstrap. `create` now refuses to copy an echo or a session that
   already has a counterpart (override with `--force`).
 - Real data (read-only scan): 37 echoes recognised; unpaired Codex dropped from 38 to 1 genuine thread.
+
+### 2026-09-27 — iteration 2: vanished sessions
+- Scan now reports `missing_side` (claude / codex / both) for pairs that lost a side. Archived Codex threads were
+  already followed into `archived_sessions` and are not "missing" (test added).
+- New `recreate --pair ID`: rebuilds the deleted side from the surviving one and repoints the pair; restores the
+  pair untouched if creation fails. App: "重建" button on the row and in the detail view, clearer explanation.
+- App decodes unknown pair statuses as "未知" instead of failing the whole scan (forward compatibility).
+- Tests: 23 passing. Real data: the 4 "missing" pairs are all `missing_side = codex` (threads deleted in Codex);
+  left for the owner to recreate or unlink.

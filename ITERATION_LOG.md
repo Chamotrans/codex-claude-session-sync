@@ -81,3 +81,9 @@ fixture-based test suite + CI, make the public build robust, and localize the UI
   No screenshot: this process has no screen-recording permission and the new bundle id needs your approval for the
   screenshot tool — **please eyeball the English UI** (`open -n <app> --args -AppleLanguages '(en)'`).
 - READMEs updated: UI follows the macOS language.
+
+### 2026-09-27 — iteration 5: app icon
+- Icon drawn in code (`tools/make_icon.swift`): Claude-orange → Codex-ink gradient squircle on the macOS icon grid
+  with the SF Symbol `arrow.triangle.2.circlepath.icloud.fill`. All 10 mac sizes in
+  `Resources/Assets.xcassets/AppIcon.appiconset`; `AppIcon.icns` + `Assets.car` now ship in the bundle.
+- Backlog 1–5 done. Next: polish/review passes.

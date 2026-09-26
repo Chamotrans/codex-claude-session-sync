@@ -21,6 +21,7 @@ targets:
     platform: macOS
     sources:
       - path: Sources/SessionSync
+      - path: Resources/Assets.xcassets
       - path: engine
         type: folder
         buildPhase: resources
@@ -42,6 +43,7 @@ targets:
         NSHighResolutionCapable: true
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.chamotrans.sessionsync
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       PRODUCT_NAME: Codex Claude Session Sync
       PRODUCT_MODULE_NAME: SessionSync
       GENERATE_INFOPLIST_FILE: "NO"

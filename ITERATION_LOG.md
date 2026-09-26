@@ -35,3 +35,16 @@ fixture-based test suite + CI, make the public build robust, and localize the UI
   unpaired Codex 38 (36 are echo imports, 2 are new real threads), unpaired Claude 3.
 - App auto-sync is off (`defaults read com.sunnyyylai.sessionsync autoSync` = 0), so no loop damage beyond the
   one-off Codex import.
+
+### 2026-09-27 — iteration 1: tests + echo prevention
+- Added `engine/tests` (stdlib unittest, 19 tests). `FakeHome` builds synthetic Claude/Codex stores in a temp HOME and
+  runs the engine as a subprocess. Run: `python3 -m unittest discover -s engine/tests`.
+- Tests found two real bugs, both fixed:
+  - `sync --prefer both` (conflict "merge") read the Codex delta after appending Claude's turns to Codex, so those
+    turns were copied back into Claude as duplicates. Not hit on real data (no merge was ever run).
+  - Sidebar registration failed when the Claude desktop account folder had no `local_*.json` yet.
+- Echo prevention (backlog 1): Codex re-imports of already-paired Claude sessions are detected from
+  `external_agent_session_imports.json`, listed separately (`echoes` in scan, "重複匯入" filter in the app) and
+  excluded from "只有 Codex", auto-create and bootstrap. `create` now refuses to copy an echo or a session that
+  already has a counterpart (override with `--force`).
+- Real data (read-only scan): 37 echoes recognised; unpaired Codex dropped from 38 to 1 genuine thread.

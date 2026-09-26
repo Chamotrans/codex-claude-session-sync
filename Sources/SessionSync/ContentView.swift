@@ -65,7 +65,7 @@ struct ContentView: View {
         case .inSync: return .green
         case .onlyClaude: return .purple
         case .onlyCodex: return .teal
-        case .all: return .secondary
+        case .all, .echoes: return .secondary
         }
     }
 
@@ -241,6 +241,7 @@ struct StatusPill: View {
             case .rebased: return ("需重設", .gray, "arrow.counterclockwise.circle")
             }
         case .only(let s):
+            if s.isEcho { return ("重複匯入", .gray, "arrow.triangle.branch") }
             return s.side == "claude" ? ("只有 Claude", .purple, "c.circle.fill") : ("只有 Codex", .teal, "x.circle.fill")
         }
     }
@@ -261,6 +262,8 @@ struct ActionButton: View {
             default:
                 EmptyView()
             }
+        case .only(let s) where s.isEcho:
+            EmptyView()
         case .only(let s):
             Button(s.side == "claude" ? "→ Codex" : "→ Claude") { store.create(from: s) }
                 .disabled(store.isBusy || (s.active ?? false))

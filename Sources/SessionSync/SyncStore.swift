@@ -42,6 +42,7 @@ final class SyncStore: ObservableObject {
         var all: [SyncRow] = scan.pairs.map { .pair($0) }
         all += scan.unpaired.claude.map { .only($0) }
         all += scan.unpaired.codex.map { .only($0) }
+        if filter == .echoes { all = (scan.echoes ?? []).map { .only($0) } }
         all = all.filter { row in
             switch filter {
             case .all: return true
@@ -60,6 +61,8 @@ final class SyncStore: ObservableObject {
             case .inSync:
                 if case .pair(let p) = row { return p.status == .inSync }
                 return false
+            case .echoes:
+                return true
             }
         }
         if !search.isEmpty {
@@ -78,6 +81,7 @@ final class SyncStore: ObservableObject {
         case .onlyClaude: return scan.unpaired.claude.count
         case .onlyCodex: return scan.unpaired.codex.count
         case .inSync: return scan.pairs.filter { $0.status == .inSync }.count
+        case .echoes: return scan.echoes?.count ?? 0
         }
     }
 

@@ -727,6 +727,49 @@ def pair_status(pair, cs, cd):
     return "conflict"
 
 
+def codex_import_map():
+    """Codex Desktop's own auto-import records: codex thread id -> Claude session id it was imported from."""
+    recs = load_json(os.path.join(CODEX_DIR, "external_agent_session_imports.json"), {}).get("records", [])
+    out = {}
+    for r in recs:
+        did = r.get("imported_thread_id")
+        src = os.path.basename(r.get("source_path", ""))
+        if did and src.endswith(".jsonl"):
+            out[did] = src[:-6]
+    return out
+
+
+def find_echoes(state, codex_ids=None):
+    """Codex threads that are Codex Desktop re-imports of a Claude session that is already paired with a
+    different Codex thread (typically a Claude copy this engine made of a Codex thread). Returns
+    codex id -> pair id. Echoes must never be paired, synced or copied again, or the two apps ping-pong."""
+    by_claude = {p["claude_id"]: pid for pid, p in state["pairs"].items()}
+    paired_codex = {p["codex_id"] for p in state["pairs"].values()}
+    out = {}
+    for did, cid in codex_import_map().items():
+        if did in paired_codex or cid not in by_claude:
+            continue
+        if codex_ids is not None and did not in codex_ids:
+            continue
+        out[did] = by_claude[cid]
+    return out
+
+
+def has_counterpart(state, side, sid):
+    """True when a session already has (or is) a copy on the other side, so creating one would duplicate it."""
+    for p in state["pairs"].values():
+        if (side == "claude" and p["claude_id"] == sid) or (side == "codex" and p["codex_id"] == sid):
+            return True
+    imports = codex_import_map()
+    if side == "codex":
+        if sid in imports:                      # Codex already imported it from a Claude session
+            return True
+    else:
+        if sid in imports.values():             # Codex already has an import of this Claude session
+            return True
+    return False
+
+
 def build_view(state, claude, codex):
     cmap = {s["id"]: s for s in claude}
     dmap = {s["id"]: s for s in codex}
@@ -745,8 +788,14 @@ def build_view(state, claude, codex):
                       "claude_active": p["claude_id"] in active_c, "codex_active": p["codex_id"] in active_d,
                       "title": (cs or cd or {}).get("title", ""), "cwd": (cs or cd or {}).get("cwd", "")})
     ign_c, ign_d = set(state["ignored"].get("claude", [])), set(state["ignored"].get("codex", []))
+    echo_map = find_echoes(state, set(dmap))
+    echoes = []
+    for did, pid in echo_map.items():
+        s = dict(dmap[did]); s["echo_of"] = pid
+        echoes.append(s)
     unpaired = {"claude": [s for s in claude if s["id"] not in paired_c and s["id"] not in ign_c],
-                "codex": [s for s in codex if s["id"] not in paired_d and s["id"] not in ign_d and not s.get("archived")]}
+                "codex": [s for s in codex if s["id"] not in paired_d and s["id"] not in ign_d
+                          and s["id"] not in echo_map and not s.get("archived")]}
     for s in unpaired["claude"]:
         s["active"] = s["id"] in active_c
     for s in unpaired["codex"]:
@@ -754,7 +803,8 @@ def build_view(state, claude, codex):
     pairs.sort(key=lambda p: max(ms_from_iso((p["claude"] or {}).get("last_activity")), ms_from_iso((p["codex"] or {}).get("last_activity"))), reverse=True)
     counts = collections.Counter(p["status"] for p in pairs)
     return {"generated_at": now_iso(), "pairs": pairs, "unpaired": unpaired, "counts": dict(counts),
-            "totals": {"claude": len(claude), "codex": len(codex), "pairs": len(pairs)}}
+            "echoes": echoes,
+            "totals": {"claude": len(claude), "codex": len(codex), "pairs": len(pairs), "echoes": len(echoes)}}
 
 
 def bootstrap(state, claude, codex):
@@ -869,6 +919,10 @@ def main():
             save_json(STATE_FILE, state)
             out = {"results": results}
         elif a.cmd == "create":
+            if a.src == "codex" and a.id in find_echoes(state):
+                raise RuntimeError("this Codex thread is a re-import of a session that is already synced; not copying it again")
+            if has_counterpart(state, a.src, a.id) and not a.force:
+                raise RuntimeError("this session already has a counterpart on the other side (use link, or --force)")
             if a.src == "claude":
                 s = next((x for x in claude if x["id"] == a.id), None)
                 if not s:

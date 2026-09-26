@@ -19,7 +19,7 @@ class EngineTestCase(unittest.TestCase):
 class ScanTests(EngineTestCase):
     def test_empty_home(self):
         v = self.h.scan()
-        self.assertEqual(v["totals"], {"claude": 0, "codex": 0, "pairs": 0})
+        self.assertEqual(v["totals"], {"claude": 0, "codex": 0, "pairs": 0, "echoes": 0})
 
     def test_counts_human_turns_not_tool_results(self):
         self.h.claude_session([("hi", "hello", [("Bash", {"command": "ls"}, "a b")]), ("again", "ok")])
@@ -144,6 +144,51 @@ class CreateTests(EngineTestCase):
         self.assertEqual(p["status"], "in_sync")
         regs = [json.load(open(os.path.join(self.h.desktop_dir, f))) for f in os.listdir(self.h.desktop_dir)]
         self.assertEqual([r["cliSessionId"] for r in regs], [did])
+
+
+class EchoTests(EngineTestCase):
+    """Codex Desktop auto-imports Claude sessions, including the Claude copies this engine made of Codex threads."""
+
+    def make_echo(self):
+        did = self.h.codex_thread([("hi", "hello")], name="Original")
+        self.h.run("create", "--from", "codex", "--id", did)       # Claude copy with the same id
+        echo = self.h.codex_thread([("hi", "hello")], title="[Codex] Original")
+        self.h.codex_import_record(did, echo)                      # Codex re-imports that Claude copy
+        return did, echo
+
+    def test_echo_is_not_unpaired(self):
+        did, echo = self.make_echo()
+        v = self.h.scan()
+        self.assertEqual(v["unpaired"]["codex"], [])
+        self.assertEqual([e["id"] for e in v["echoes"]], [echo])
+        self.assertEqual(v["echoes"][0]["echo_of"], did)
+
+    def test_bootstrap_does_not_pair_echo(self):
+        did, echo = self.make_echo()
+        self.h.run("bootstrap")
+        v = self.h.scan()
+        self.assertEqual(v["totals"]["pairs"], 1)
+        self.assertEqual(self.h.pair(v, did)["codex"]["id"], did)
+
+    def test_cannot_create_copy_of_echo(self):
+        did, echo = self.make_echo()
+        out = self.h.run("create", "--from", "codex", "--id", echo, ok=False)
+        self.assertIn("re-import", out["error"])
+
+    def test_cannot_create_second_copy(self):
+        sid = self.h.claude_session([("hi", "hello")])
+        self.h.run("create", "--from", "claude", "--id", sid)
+        out = self.h.run("create", "--from", "claude", "--id", sid, ok=False)
+        self.assertIn("counterpart", out["error"])
+
+    def test_cannot_copy_claude_session_codex_already_imported(self):
+        cid = self.h.claude_session([("hi", "hello")])
+        did = self.h.codex_thread([("hi", "hello")])
+        self.h.codex_import_record(cid, did)
+        out = self.h.run("create", "--from", "claude", "--id", cid, ok=False)
+        self.assertIn("counterpart", out["error"])
+        out = self.h.run("create", "--from", "codex", "--id", did, ok=False)
+        self.assertIn("counterpart", out["error"])
 
 
 if __name__ == "__main__":

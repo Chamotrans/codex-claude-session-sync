@@ -103,6 +103,11 @@ struct DetailView: View {
                     Button("立即同步") { store.syncPair(p) }.buttonStyle(.borderedProminent)
                 }
                 Button("解除配對") { store.unlink(p) }
+            case .only(let s) where s.isEcho:
+                Label("呢個係 Codex Desktop 重複匯入嘅副本，原本嘅對話已經同步緊，唔會再同步或者複製。可以喺 Codex 封存。",
+                      systemImage: "arrow.triangle.branch")
+                    .font(.callout).foregroundStyle(.secondary)
+                Button("隱藏") { store.ignore(s) }
             case .only(let s):
                 Button(s.side == "claude" ? "喺 Codex 建立副本" : "喺 Claude 建立副本") { store.create(from: s) }
                     .buttonStyle(.borderedProminent)

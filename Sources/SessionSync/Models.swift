@@ -15,6 +15,9 @@ struct SessionInfo: Codable, Identifiable, Hashable {
     var imported: Bool?
     var archived: Bool?
     var inDesktop: Bool?
+    /// Codex only: set when this thread is Codex Desktop's re-import of an already-synced session (pair id).
+    var echoOf: String?
+    var isEcho: Bool { echoOf != nil }
 
     /// Claude sessions only: true when the Claude desktop app's sidebar knows about this session.
     var isInDesktopSidebar: Bool { inDesktop ?? true }
@@ -77,6 +80,7 @@ struct Totals: Codable, Hashable {
     var claude: Int
     var codex: Int
     var pairs: Int
+    var echoes: Int?
 }
 
 struct ScanResult: Codable, Hashable {
@@ -85,6 +89,7 @@ struct ScanResult: Codable, Hashable {
     var unpaired: Unpaired
     var counts: [String: Int]
     var totals: Totals
+    var echoes: [SessionInfo]?
 }
 
 struct SyncResult: Codable {
@@ -164,7 +169,7 @@ enum SyncRow: Identifiable, Hashable {
 }
 
 enum RowFilter: String, CaseIterable, Identifiable {
-    case all, needsSync, conflicts, onlyClaude, onlyCodex, inSync
+    case all, needsSync, conflicts, onlyClaude, onlyCodex, inSync, echoes
     var id: String { rawValue }
     var label: String {
         switch self {
@@ -174,6 +179,7 @@ enum RowFilter: String, CaseIterable, Identifiable {
         case .onlyClaude: return "只有 Claude"
         case .onlyCodex: return "只有 Codex"
         case .inSync: return "已同步"
+        case .echoes: return "重複匯入"
         }
     }
     var symbol: String {
@@ -184,6 +190,7 @@ enum RowFilter: String, CaseIterable, Identifiable {
         case .onlyClaude: return "c.circle"
         case .onlyCodex: return "x.circle"
         case .inSync: return "checkmark.circle"
+        case .echoes: return "arrow.triangle.branch"
         }
     }
 }

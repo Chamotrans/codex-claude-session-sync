@@ -43,13 +43,13 @@ enum PairStatus: String, Codable, CaseIterable {
 
     var label: String {
         switch self {
-        case .inSync: return "已同步"
-        case .claudeNewer: return "Claude 較新"
-        case .codexNewer: return "Codex 較新"
-        case .conflict: return "衝突"
-        case .missing: return "缺少一邊"
-        case .rebased: return "需重設基準"
-        case .unknown: return "未知"
+        case .inSync: return String(localized: "In sync")
+        case .claudeNewer: return String(localized: "Claude newer")
+        case .codexNewer: return String(localized: "Codex newer")
+        case .conflict: return String(localized: "Conflict")
+        case .missing: return String(localized: "One side missing")
+        case .rebased: return String(localized: "Needs rebase")
+        case .unknown: return String(localized: "Unknown")
         }
     }
 
@@ -182,13 +182,13 @@ enum RowFilter: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .all: return "全部"
-        case .needsSync: return "待同步"
-        case .conflicts: return "衝突"
-        case .onlyClaude: return "只有 Claude"
-        case .onlyCodex: return "只有 Codex"
-        case .inSync: return "已同步"
-        case .echoes: return "重複匯入"
+        case .all: return String(localized: "All")
+        case .needsSync: return String(localized: "Needs sync")
+        case .conflicts: return String(localized: "Conflicts")
+        case .onlyClaude: return String(localized: "Only in Claude")
+        case .onlyCodex: return String(localized: "Only in Codex")
+        case .inSync: return String(localized: "In sync")
+        case .echoes: return String(localized: "Re-imports")
         }
     }
     var symbol: String {

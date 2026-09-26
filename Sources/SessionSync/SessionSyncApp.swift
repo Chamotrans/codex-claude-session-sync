@@ -13,8 +13,8 @@ struct SessionSyncApp: App {
         }
         .commands {
             CommandGroup(after: .newItem) {
-                Button("重新掃描") { store.refresh() }.keyboardShortcut("r", modifiers: .command)
-                Button("同步全部") { store.syncAll() }.keyboardShortcut("s", modifiers: [.command, .shift])
+                Button("Rescan") { store.refresh() }.keyboardShortcut("r", modifiers: .command)
+                Button("Sync All") { store.syncAll() }.keyboardShortcut("s", modifiers: [.command, .shift])
             }
         }
         Settings {

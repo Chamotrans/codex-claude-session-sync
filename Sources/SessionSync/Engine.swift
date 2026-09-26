@@ -14,7 +14,7 @@ final class Engine {
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "/usr/bin/python3"
     }
 
-    static let pythonHelp = "搵唔到可用嘅 python3。請安裝 Xcode Command Line Tools（喺 Terminal 執行 xcode-select --install）或者 Homebrew Python（brew install python），然後喺設定填 python3 路徑。"
+    static let pythonHelp = String(localized: "No usable python3 found. Install the Xcode Command Line Tools (run xcode-select --install in Terminal) or Homebrew Python (brew install python), then set the python3 path in Settings.")
 
     var scriptURL: URL {
         if let custom = UserDefaults.standard.string(forKey: "enginePath"), !custom.isEmpty {
@@ -56,7 +56,7 @@ final class Engine {
                 do {
                     try p.run()
                 } catch {
-                    cont.resume(throwing: Failure(message: "無法啟動引擎：\(error.localizedDescription)\n\(Engine.pythonHelp)"))
+                    cont.resume(throwing: Failure(message: String(localized: "Could not start the engine: \(error.localizedDescription)") + "\n" + Engine.pythonHelp))
                     return
                 }
                 // Drain stderr concurrently so a chatty engine can never block on a full pipe.
@@ -78,7 +78,7 @@ final class Engine {
                     if msg.contains("xcode-select") || msg.contains("developer tools") || msg.contains("CommandLineTools") {
                         cont.resume(throwing: Failure(message: Engine.pythonHelp))
                     } else {
-                        cont.resume(throwing: Failure(message: "引擎錯誤 (\(p.terminationStatus))：\(msg.suffix(400))"))
+                        cont.resume(throwing: Failure(message: String(localized: "Engine error (\(Int(p.terminationStatus))): \(String(msg.suffix(400)))")))
                     }
                     return
                 }
@@ -94,7 +94,7 @@ final class Engine {
             return try dec.decode(type, from: data)
         } catch {
             let s = String(data: data.prefix(300), encoding: .utf8) ?? ""
-            throw Failure(message: "解析引擎輸出失敗：\(error.localizedDescription)\n\(s)")
+            throw Failure(message: String(localized: "Could not read the engine output: \(error.localizedDescription)") + "\n" + s)
         }
     }
 

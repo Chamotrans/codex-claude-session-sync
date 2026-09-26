@@ -69,3 +69,15 @@ fixture-based test suite + CI, make the public build robust, and localize the UI
 - `build.sh`: `--release` (Release config, zip into dist/, no launch) and `--no-open`. Building with
   `CODE_SIGNING_ALLOWED=NO` removes the recurring "detritus" codesign failure; we sign afterwards. Tests are
   excluded from the app bundle. READMEs (3 languages) document tests and release builds.
+
+### 2026-09-27 — iteration 4: UI localization
+- All 157 UI strings moved to English source keys with a String Catalog (`Sources/SessionSync/Localizable.xcstrings`):
+  zh-Hant keeps the original Cantonese wording, zh-Hans is new (Mandarin written style). Computed labels and
+  messages use `String(localized:)`; helper views take `LocalizedStringKey`.
+- Keys were taken from the compiler's own extraction (`SWIFT_EMIT_LOC_STRINGS=YES` → `.stringsdata`), so nothing is
+  missing; a script checked that `%lld`/`%@` specifiers match in every translation.
+- Verified in the built bundle: localizations `en`, `zh-Hant`, `zh-Hans`; formatted strings render correctly in all
+  three. The app was launched once with `HOME` pointed at a throw-away fixture home (real `state.json` untouched).
+  No screenshot: this process has no screen-recording permission and the new bundle id needs your approval for the
+  screenshot tool — **please eyeball the English UI** (`open -n <app> --args -AppleLanguages '(en)'`).
+- READMEs updated: UI follows the macOS language.

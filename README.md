@@ -12,7 +12,7 @@ Keep your coding-agent conversations in sync between **Claude Code** and **OpenA
 - Makes synced sessions visible in both apps' sidebars (Codex Desktop and the Claude desktop app).
 - Bulk importer for your whole Codex history into Claude Code (`engine/codex2claude.py`).
 
-> Status: personal tool, released as-is. Tested on macOS 27 with Claude Code 2.1 and Codex CLI 0.153 / Codex Desktop. The app UI is currently in Traditional Chinese (Cantonese); the engine and this README are in English.
+> Status: personal tool, released as-is. Tested on macOS 27 with Claude Code 2.1 and Codex CLI 0.153 / Codex Desktop. The app UI follows your macOS language: English, Traditional Chinese (Cantonese) or Simplified Chinese.
 
 ## Install
 

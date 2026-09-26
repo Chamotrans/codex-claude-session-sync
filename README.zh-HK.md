@@ -12,7 +12,7 @@
 - 同步後嘅對話會出現喺兩個 app 嘅側欄（Codex Desktop 同 Claude desktop app）。
 - 附帶批量匯入工具，可以將整個 Codex 歷史搬入 Claude Code（`engine/codex2claude.py`）。
 
-> 狀態：個人工具，按現狀發佈。喺 macOS 27、Claude Code 2.1、Codex CLI 0.153 / Codex Desktop 測試過。App 界面目前係繁體中文（廣東話）。
+> 狀態：個人工具，按現狀發佈。喺 macOS 27、Claude Code 2.1、Codex CLI 0.153 / Codex Desktop 測試過。App 界面會跟隨 macOS 語言：English、繁體中文（廣東話）或簡體中文。
 
 ## 安裝
 

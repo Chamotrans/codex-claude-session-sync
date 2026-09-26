@@ -27,6 +27,8 @@ targets:
         excludes:
           - "__pycache__"
           - "*.pyc"
+          - "tests"
+          - "tests/**"
     info:
       path: Resources/Info.plist
       properties:

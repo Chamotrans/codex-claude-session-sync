@@ -28,7 +28,13 @@ git clone https://github.com/Chamotrans/codex-claude-session-sync.git
 cd codex-claude-session-sync && ./build.sh
 ```
 
-`build.sh` 會生成 Xcode project、編譯、清走令 Xcode 簽名步驟失敗嘅 `com.apple.provenance` 屬性、ad-hoc 簽名並啟動 app。
+`build.sh` 會生成 Xcode project、無簽名編譯、清走 `com.apple.provenance` 屬性、ad-hoc 簽名並啟動 app。`./build.sh --release` 會用 Release 設定編譯並打包 `dist/Codex-Claude-Session-Sync-<version>.zip`（唔會啟動）；`--no-open` 唔啟動。
+
+執行引擎測試（只用標準庫，用臨時 HOME，唔會碰你嘅 session）：
+
+```bash
+python3 -m unittest discover -s engine/tests
+```
 
 ## 第一次使用
 

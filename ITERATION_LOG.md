@@ -57,3 +57,15 @@ fixture-based test suite + CI, make the public build robust, and localize the UI
 - App decodes unknown pair statuses as "未知" instead of failing the whole scan (forward compatibility).
 - Tests: 23 passing. Real data: the 4 "missing" pairs are all `missing_side = codex` (threads deleted in Codex);
   left for the owner to recreate or unlink.
+
+### 2026-09-27 — iteration 3: CI + public-build robustness
+- GitHub Actions `CI`: engine tests on Ubuntu (Python 3.12) and an unsigned Release `xcodebuild` on macOS. First
+  run green on the branch.
+- Engine tests also pass on the macOS system Python 3.9.6. One unexplained 3.9 failure on the very first run;
+  9 reruns clean, not reproducible — watching CI for recurrence.
+- App finds python3 itself (Homebrew, python.org, then /usr/bin/python3) instead of `/usr/bin/env python3`, shows
+  install instructions when python3 is missing or is the Command Line Tools stub, and drains stderr on a separate
+  thread (a large traceback could previously deadlock the pipe). Settings shows the Python in use.
+- `build.sh`: `--release` (Release config, zip into dist/, no launch) and `--no-open`. Building with
+  `CODE_SIGNING_ALLOWED=NO` removes the recurring "detritus" codesign failure; we sign afterwards. Tests are
+  excluded from the app bundle. READMEs (3 languages) document tests and release builds.

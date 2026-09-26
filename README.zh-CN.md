@@ -28,7 +28,13 @@ git clone https://github.com/Chamotrans/codex-claude-session-sync.git
 cd codex-claude-session-sync && ./build.sh
 ```
 
-`build.sh` 会生成 Xcode 工程、编译、清除导致 Xcode 签名步骤失败的 `com.apple.provenance` 属性、ad-hoc 签名并启动 app。
+`build.sh` 会生成 Xcode 工程、无签名编译、清除 `com.apple.provenance` 属性、ad-hoc 签名并启动 app。`./build.sh --release` 以 Release 配置编译并打包 `dist/Codex-Claude-Session-Sync-<version>.zip`（不启动）；`--no-open` 不启动。
+
+运行引擎测试（仅标准库，使用临时 HOME，不会触碰你的 session）：
+
+```bash
+python3 -m unittest discover -s engine/tests
+```
 
 ## 首次使用
 

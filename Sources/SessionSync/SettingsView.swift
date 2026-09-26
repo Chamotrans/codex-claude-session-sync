@@ -20,9 +20,11 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("引擎") {
-                TextField("python3 路徑（留空用 /usr/bin/env python3）", text: $pythonPath)
+                TextField("python3 路徑（留空自動搵）", text: $pythonPath)
                 TextField("sessionsync.py 路徑（留空用 app 內置）", text: $enginePath)
-                LabeledContent("目前使用", value: Engine.shared.scriptURL.path)
+                LabeledContent("目前使用引擎", value: Engine.shared.scriptURL.path)
+                    .font(.caption)
+                LabeledContent("目前使用 Python", value: Engine.shared.pythonPath)
                     .font(.caption)
             }
         }

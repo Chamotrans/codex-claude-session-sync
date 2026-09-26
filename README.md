@@ -28,7 +28,13 @@ git clone https://github.com/Chamotrans/codex-claude-session-sync.git
 cd codex-claude-session-sync && ./build.sh
 ```
 
-`build.sh` generates the Xcode project, builds, strips the `com.apple.provenance` attributes that make Xcode's own codesign step fail, ad-hoc signs the app and launches it.
+`build.sh` generates the Xcode project, builds unsigned, strips the `com.apple.provenance` attributes, ad-hoc signs the app and launches it. `./build.sh --release` builds the Release configuration and packages `dist/Codex-Claude-Session-Sync-<version>.zip` without launching; `--no-open` skips the launch.
+
+Run the engine tests (standard library only, they use a throw-away HOME and never touch your sessions):
+
+```bash
+python3 -m unittest discover -s engine/tests
+```
 
 ## First run
 

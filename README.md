@@ -10,9 +10,11 @@ Keep your coding-agent conversations in sync between **Claude Code** and **OpenA
 - Auto-sync: timer plus file-system watching of both tools' session folders. Open or just-written sessions are never touched.
 - One-click counterparts: a conversation that exists only in Claude gets a Codex thread, and vice versa.
 - Makes synced sessions visible in both apps' sidebars (Codex Desktop and the Claude desktop app).
+- Recognises Codex Desktop's re-imports of already-synced sessions ("Re-imports") and never syncs or copies them.
+- Pairs that lost a side (a thread deleted in Codex, a session deleted in Claude) show which side is gone and can be recreated.
 - Bulk importer for your whole Codex history into Claude Code (`engine/codex2claude.py`).
 
-> Status: personal tool, released as-is. Tested on macOS 27 with Claude Code 2.1 and Codex CLI 0.153 / Codex Desktop. The app UI is currently in Traditional Chinese (Cantonese); the engine and this README are in English.
+> Status: personal tool, released as-is. Tested on macOS 27 with Claude Code 2.1 and Codex CLI 0.153 / Codex Desktop. The app UI follows your macOS language: English, Traditional Chinese (Cantonese) or Simplified Chinese.
 
 ## Install
 
@@ -28,7 +30,13 @@ git clone https://github.com/Chamotrans/codex-claude-session-sync.git
 cd codex-claude-session-sync && ./build.sh
 ```
 
-`build.sh` generates the Xcode project, builds, strips the `com.apple.provenance` attributes that make Xcode's own codesign step fail, ad-hoc signs the app and launches it.
+`build.sh` generates the Xcode project, builds unsigned, strips the `com.apple.provenance` attributes, ad-hoc signs the app and launches it. `./build.sh --release` builds the Release configuration and packages `dist/Codex-Claude-Session-Sync-<version>.zip` without launching; `--no-open` skips the launch.
+
+Run the engine tests (standard library only, they use a throw-away HOME and never touch your sessions):
+
+```bash
+python3 -m unittest discover -s engine/tests
+```
 
 ## First run
 
@@ -65,9 +73,15 @@ python3 engine/sessionsync.py create --from claude --id ID   # or --from codex
 python3 engine/sessionsync.py link --claude ID --codex ID
 python3 engine/sessionsync.py register-all [--all]       # Claude desktop sidebar entries
 python3 engine/sessionsync.py retitle                    # use Codex's generated titles on the Claude side
+python3 engine/sessionsync.py recreate --pair ID         # rebuild the deleted side of a pair
+python3 engine/sessionsync.py fix-titles [--apply]       # undo "[Codex] " titles on sessions that started in Claude
 python3 engine/sessionsync.py open --side codex --id ID  # prints the resume command
 python3 engine/codex2claude.py [--dry-run] [--force]     # bulk import of all Codex sessions into Claude Code
 ```
+
+## Codex Desktop re-imports
+
+Codex Desktop imports Claude Code sessions by itself (`external-agent-import-sync-enabled` in `~/.codex/config.toml`). It also imports the Claude copies this app makes of Codex threads, which creates a second Codex thread for the same conversation. The app lists these under **Re-imports** and never touches them; you can archive them in Codex. If you prefer this app to be the only bridge, set `external-agent-import-sync-enabled = false`.
 
 ## Limitations
 

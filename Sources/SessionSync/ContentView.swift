@@ -15,11 +15,11 @@ struct ContentView: View {
             if let row = store.selectedRow {
                 DetailView(row: row)
             } else {
-                ContentUnavailableView("揀一個工作階段", systemImage: "arrow.left.arrow.right", description: Text("左邊列表會顯示每個對話喺 Claude 同 Codex 兩邊嘅最後編輯時間，邊個新啲一目了然。"))
+                ContentUnavailableView("Select a conversation", systemImage: "arrow.left.arrow.right", description: Text("The list shows when each conversation was last edited in Claude and in Codex, so you can see at a glance which side is newer."))
             }
         }
         .toolbar { toolbar }
-        .searchable(text: $store.search, placement: .toolbar, prompt: "搜尋標題或項目")
+        .searchable(text: $store.search, placement: .toolbar, prompt: "Search titles or projects")
         .sheet(item: $store.pendingConflict) { pair in ConflictSheet(pair: pair) }
         .sheet(isPresented: $showLog) { LogSheet() }
         .overlay(alignment: .bottom) { statusBar }
@@ -29,7 +29,7 @@ struct ContentView: View {
 
     private var sidebar: some View {
         List(selection: $store.filter) {
-            Section("狀態") {
+            Section("Status") {
                 ForEach(RowFilter.allCases) { f in
                     Label {
                         HStack {
@@ -47,10 +47,10 @@ struct ContentView: View {
                 }
             }
             if let t = store.scan?.totals {
-                Section("總數") {
+                Section("Totals") {
                     LabeledContent("Claude", value: "\(t.claude)")
                     LabeledContent("Codex", value: "\(t.codex)")
-                    LabeledContent("已配對", value: "\(t.pairs)")
+                    LabeledContent("Paired", value: "\(t.pairs)")
                 }
                 .font(.caption)
             }
@@ -65,7 +65,7 @@ struct ContentView: View {
         case .inSync: return .green
         case .onlyClaude: return .purple
         case .onlyCodex: return .teal
-        case .all: return .secondary
+        case .all, .echoes: return .secondary
         }
     }
 
@@ -73,9 +73,9 @@ struct ContentView: View {
 
     private var list: some View {
         Table(store.rows, selection: $store.selection) {
-            TableColumn("對話") { row in
+            TableColumn("Conversation") { row in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(row.title.isEmpty ? "(無標題)" : row.title).lineLimit(1)
+                    Text(row.title.isEmpty ? String(localized: "(untitled)") : row.title).lineLimit(1)
                     Text(row.projectName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 .padding(.vertical, 2)
@@ -92,7 +92,7 @@ struct ContentView: View {
             }
             .width(min: 120, ideal: 140)
 
-            TableColumn("狀態") { row in
+            TableColumn("Status") { row in
                 StatusPill(row: row)
             }
             .width(min: 110, ideal: 130)
@@ -109,7 +109,7 @@ struct ContentView: View {
         }
         .overlay {
             if store.scan == nil {
-                ProgressView("首次掃描中…")
+                ProgressView("Scanning for the first time…")
             } else if store.rows.isEmpty {
                 ContentUnavailableView.search
             }
@@ -141,19 +141,19 @@ struct ContentView: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            Button { store.refresh() } label: { Label("重新掃描", systemImage: "arrow.clockwise") }
+            Button { store.refresh() } label: { Label("Rescan", systemImage: "arrow.clockwise") }
                 .disabled(store.isBusy)
-            Button { store.syncAll() } label: { Label("同步全部", systemImage: "arrow.triangle.2.circlepath") }
+            Button { store.syncAll() } label: { Label("Sync All", systemImage: "arrow.triangle.2.circlepath") }
                 .disabled(store.isBusy)
-            Toggle(isOn: $store.autoSync) { Label("自動同步", systemImage: store.autoSync ? "icloud.fill" : "icloud") }
+            Toggle(isOn: $store.autoSync) { Label("Auto Sync", systemImage: store.autoSync ? "icloud.fill" : "icloud") }
                 .toggleStyle(.button)
-                .help("開啟後每次掃描都會自動推送較新嘅回合去另一邊（衝突同使用中嘅對話會略過）")
+                .help("When on, every scan pushes newer turns to the other side (conflicts and open conversations are skipped)")
             Button { store.registerAllInDesktop() } label: {
-                Label(store.missingFromDesktopCount > 0 ? "登記側欄 (\(store.missingFromDesktopCount))" : "登記側欄", systemImage: "sidebar.left")
+                Label(store.missingFromDesktopCount > 0 ? String(localized: "Register Sidebar (\(store.missingFromDesktopCount))") : String(localized: "Register Sidebar"), systemImage: "sidebar.left")
             }
             .disabled(store.isBusy || store.missingFromDesktopCount == 0)
-            .help("將由 Codex 同步過嚟、但 Claude Desktop 側欄未有嘅對話登記到側欄（其他 CLI 對話可以逐個喺右鍵選單登記）")
-            Button { showLog.toggle() } label: { Label("記錄", systemImage: "list.bullet.rectangle") }
+            .help("Add conversations that came from Codex to the Claude desktop sidebar (other CLI sessions can be registered one by one from the context menu)")
+            Button { showLog.toggle() } label: { Label("Activity", systemImage: "list.bullet.rectangle") }
         }
     }
 
@@ -169,14 +169,14 @@ struct ContentView: View {
                 Image(systemName: last.isError ? "xmark.circle" : "checkmark.circle").foregroundStyle(last.isError ? .red : .green)
                 Text(last.text).lineLimit(1)
             } else {
-                Text("就緒")
+                Text("Ready")
             }
             Spacer()
             if let d = store.lastRefresh {
-                Text("上次掃描 " + RelativeTime.string(d)).foregroundStyle(.secondary)
+                Text("Last scan \(RelativeTime.string(d))").foregroundStyle(.secondary)
             }
             if store.autoSync {
-                Label("自動同步開啟", systemImage: "icloud.fill").foregroundStyle(.blue)
+                Label("Auto sync on", systemImage: "icloud.fill").foregroundStyle(.blue)
             }
         }
         .font(.caption)
@@ -200,13 +200,13 @@ struct SideCell: View {
                     if isNewer { Image(systemName: "arrow.up.circle.fill").foregroundStyle(.orange) }
                     Text(RelativeTime.string(s.lastActivityDate))
                         .fontWeight(isNewer ? .semibold : .regular)
-                    if active { Image(systemName: "circle.fill").font(.system(size: 7)).foregroundStyle(.green).help("使用中") }
+                    if active { Image(systemName: "circle.fill").font(.system(size: 7)).foregroundStyle(.green).help("Open") }
                     if s.side == "claude" && !s.isInDesktopSidebar {
                         Image(systemName: "sidebar.left").font(.caption2).foregroundStyle(.secondary)
-                            .help("Claude Desktop 側欄未登記（只可經 claude --resume 開啟）")
+                            .help("Not in the Claude desktop sidebar (open it with claude --resume)")
                     }
                 }
-                Text("\(s.turns) 回合 · \(ByteCount.string(s.size))")
+                Text("\(s.turns) turns · \(ByteCount.string(s.size))")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .help(RelativeTime.full(s.lastActivityDate))
@@ -233,15 +233,20 @@ struct StatusPill: View {
         switch row {
         case .pair(let p):
             switch p.status {
-            case .inSync: return ("已同步", .green, "checkmark.circle.fill")
+            case .inSync: return (String(localized: "In sync"), .green, "checkmark.circle.fill")
             case .claudeNewer: return ("Claude → Codex \(p.claudeNewTurns)", .orange, "arrow.right.circle.fill")
             case .codexNewer: return ("Codex → Claude \(p.codexNewTurns)", .orange, "arrow.left.circle.fill")
-            case .conflict: return ("衝突 \(p.claudeNewTurns)/\(p.codexNewTurns)", .red, "exclamationmark.triangle.fill")
-            case .missing: return ("缺少一邊", .gray, "questionmark.circle")
-            case .rebased: return ("需重設", .gray, "arrow.counterclockwise.circle")
+            case .conflict: return (String(localized: "Conflict \(p.claudeNewTurns)/\(p.codexNewTurns)"), .red, "exclamationmark.triangle.fill")
+            case .missing:
+                let text = p.missingSide == "codex" ? String(localized: "Codex side deleted")
+                    : (p.missingSide == "claude" ? String(localized: "Claude side deleted") : String(localized: "Both sides deleted"))
+                return (text, .gray, "questionmark.circle")
+            case .unknown: return (String(localized: "Unknown"), .gray, "questionmark.circle")
+            case .rebased: return (String(localized: "Needs rebase"), .gray, "arrow.counterclockwise.circle")
             }
         case .only(let s):
-            return s.side == "claude" ? ("只有 Claude", .purple, "c.circle.fill") : ("只有 Codex", .teal, "x.circle.fill")
+            if s.isEcho { return (String(localized: "Re-import"), .gray, "arrow.triangle.branch") }
+            return s.side == "claude" ? (String(localized: "Only in Claude"), .purple, "c.circle.fill") : (String(localized: "Only in Codex"), .teal, "x.circle.fill")
         }
     }
 }
@@ -255,16 +260,21 @@ struct ActionButton: View {
         case .pair(let p):
             switch p.status {
             case .claudeNewer, .codexNewer, .rebased:
-                Button("同步") { store.syncPair(p) }.disabled(store.isBusy)
+                Button("Sync") { store.syncPair(p) }.disabled(store.isBusy)
             case .conflict:
-                Button("解決") { store.pendingConflict = p }.disabled(store.isBusy)
+                Button("Resolve") { store.pendingConflict = p }.disabled(store.isBusy)
+            case .missing where p.missingSide == "claude" || p.missingSide == "codex":
+                Button("Recreate") { store.recreate(p) }.disabled(store.isBusy)
+                    .help("Rebuild the deleted side from the side that still exists")
             default:
                 EmptyView()
             }
+        case .only(let s) where s.isEcho:
+            EmptyView()
         case .only(let s):
             Button(s.side == "claude" ? "→ Codex" : "→ Claude") { store.create(from: s) }
                 .disabled(store.isBusy || (s.active ?? false))
-                .help((s.active ?? false) ? "對話使用中，請稍後再試" : "喺另一邊建立呢個對話嘅副本")
+                .help((s.active ?? false) ? String(localized: "This conversation is open; try again later") : String(localized: "Create a copy of this conversation on the other side"))
         }
     }
 }
@@ -275,22 +285,22 @@ struct RowMenu: View {
 
     var body: some View {
         if let c = row.claude {
-            Button("複製 Claude resume 指令") { store.copyResumeCommand(c) }
-            Button("喺 Finder 顯示 Claude 檔案") { store.revealInFinder(c) }
+            Button("Copy Claude Resume Command") { store.copyResumeCommand(c) }
+            Button("Show Claude File in Finder") { store.revealInFinder(c) }
             if !c.isInDesktopSidebar {
-                Button("登記到 Claude Desktop 側欄") { store.registerInDesktop(c) }
+                Button("Add to Claude Desktop Sidebar") { store.registerInDesktop(c) }
             }
         }
         if let d = row.codex {
-            Button("複製 Codex resume 指令") { store.copyResumeCommand(d) }
-            Button("喺 Finder 顯示 Codex 檔案") { store.revealInFinder(d) }
+            Button("Copy Codex Resume Command") { store.copyResumeCommand(d) }
+            Button("Show Codex File in Finder") { store.revealInFinder(d) }
         }
         Divider()
         switch row {
         case .pair(let p):
-            Button("解除配對") { store.unlink(p) }
+            Button("Unlink") { store.unlink(p) }
         case .only(let s):
-            Button("隱藏呢個工作階段") { store.ignore(s) }
+            Button("Hide This Conversation") { store.ignore(s) }
         }
     }
 }
@@ -304,25 +314,25 @@ struct ConflictSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("兩邊都有新回合", systemImage: "exclamationmark.triangle.fill")
+            Label("Both sides have new turns", systemImage: "exclamationmark.triangle.fill")
                 .font(.title3.weight(.semibold)).foregroundStyle(.red)
             Text(pair.title).font(.headline)
-            Text("自上次同步後，Claude 多咗 \(pair.claudeNewTurns) 個回合，Codex 多咗 \(pair.codexNewTurns) 個回合。你想點處理？")
+            Text("Since the last sync, Claude gained \(pair.claudeNewTurns) turns and Codex gained \(pair.codexNewTurns). How do you want to resolve it?")
             VStack(alignment: .leading, spacing: 8) {
-                choice("合併兩邊（建議）", "兩邊都會補上對方嘅新回合，兩邊內容都齊，只係次序唔同。", "both")
-                choice("以 Claude 為準", "只將 Claude 嘅新回合推去 Codex；Codex 嘅新回合會留喺 Codex 唔會推過嚟。", "claude")
-                choice("以 Codex 為準", "只將 Codex 嘅新回合推去 Claude；Claude 嘅新回合會留喺 Claude。", "codex")
+                choice("Merge both (recommended)", "Each side gets the other side's new turns. Both end up complete, only the order differs.", "both")
+                choice("Keep Claude", "Only Claude's new turns go to Codex. Codex's new turns stay in Codex.", "claude")
+                choice("Keep Codex", "Only Codex's new turns go to Claude. Claude's new turns stay in Claude.", "codex")
             }
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
             }
         }
         .padding(20)
         .frame(width: 460)
     }
 
-    private func choice(_ title: String, _ desc: String, _ prefer: String) -> some View {
+    private func choice(_ title: LocalizedStringKey, _ desc: LocalizedStringKey, _ prefer: String) -> some View {
         Button {
             dismiss()
             store.syncPair(pair, prefer: prefer)
@@ -345,10 +355,10 @@ struct LogSheet: View {
     var body: some View {
         VStack(alignment: .leading) {
             HStack {
-                Text("活動記錄").font(.headline)
+                Text("Activity").font(.headline)
                 Spacer()
-                Button("清除") { store.log.removeAll() }
-                Button("關閉") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Clear") { store.log.removeAll() }
+                Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
             }
             List(store.log) { e in
                 HStack(alignment: .top) {

@@ -16,6 +16,8 @@ CLI (all output is JSON unless --pretty):
   sessionsync.py open --side claude|codex --id ID      print the command to resume that session
   sessionsync.py register --id CLAUDE_ID               add a CLI session to the Claude desktop app sidebar
   sessionsync.py register-all [--all]                  add Codex-derived (or, with --all, every) CLI session to the sidebar
+  sessionsync.py recreate --pair ID                    rebuild the missing side of a pair from the surviving side
+  sessionsync.py fix-titles [--apply]                  undo "[Codex] " titles wrongly put on Claude-origin sessions (dry run by default)
   sessionsync.py retitle                               use Codex's generated titles for Codex-derived Claude sessions
 """
 import argparse, glob, json, os, re, sqlite3, sys, time, uuid, datetime, subprocess, collections
@@ -378,13 +380,13 @@ CLAUDE_DESKTOP_ROOT = os.path.join(HOME, "Library", "Application Support", "Clau
 
 def claude_desktop_dir():
     """The account folder the Claude desktop app is currently using (the one with the newest local_*.json)."""
-    best, best_m = None, -1
+    best, best_m = None, None
     for d in glob.glob(os.path.join(CLAUDE_DESKTOP_ROOT, "*", "*")):
         if not os.path.isdir(d):
             continue
         files = glob.glob(os.path.join(d, "local_*.json"))
-        m = max([os.stat(f).st_mtime for f in files], default=-1)
-        if m > best_m:
+        m = max([os.stat(f).st_mtime for f in files], default=os.stat(d).st_mtime - 1e9)
+        if best_m is None or m > best_m:
             best, best_m = d, m
     return best
 
@@ -437,6 +439,62 @@ def codex_titles():
     except Exception:
         pass
     return out
+
+
+ENGINE_TITLE_PREFIX = '{"type": "custom-title", "customTitle": '   # json.dumps default separators; Claude writes compact JSON
+
+
+def fix_titles(claude, state, apply=False):
+    """Undo "[Codex] …" titles that an early `retitle` wrote onto sessions that actually started in Claude.
+    Only titles written by this engine (recognisable by its JSON formatting) are touched. The restored title is
+    the last title Claude itself set before ours, else the first prompt. Dry run unless apply=True."""
+    codex_origin = {p["claude_id"] for p in state["pairs"].values() if p.get("origin") in ("bootstrap_same_id", "created_claude")}
+    d = claude_desktop_dir()
+    reg = {}
+    if d:
+        for f in glob.glob(os.path.join(d, "local_*.json")):
+            o = load_json(f, {})
+            if o.get("cliSessionId"):
+                reg[o["cliSessionId"]] = (f, o)
+    fixes = []
+    for s in claude:
+        if s["id"] in codex_origin:
+            continue
+        before, last_title, engine_titles, seen_engine = None, None, set(), False
+        with open(s["path"], errors="replace") as fh:
+            for line in fh:
+                if '"custom-title"' not in line:
+                    continue
+                try:
+                    o = json.loads(line)
+                except Exception:
+                    continue
+                if o.get("type") != "custom-title":
+                    continue
+                t = o.get("customTitle") or ""
+                if line.startswith(ENGINE_TITLE_PREFIX):
+                    engine_titles.add(t)
+                    seen_engine = True
+                elif not seen_engine:
+                    before = t          # Claude's own title from before the engine touched this session
+                last_title = t
+        # Fix when the current title is an engine-written "[Codex] …" title, or Claude copied it back verbatim.
+        if not last_title or not last_title.startswith("[Codex] ") or last_title not in engine_titles:
+            continue
+        restored = before or last_title[len("[Codex] "):]
+        fix = {"id": s["id"], "from": last_title, "to": restored, "registry": False}
+        if s["id"] in reg and (reg[s["id"]][1].get("title") or "").startswith("[Codex] "):
+            fix["registry"] = True
+        fixes.append(fix)
+        if apply:
+            with open(s["path"], "a") as w:
+                w.write(json.dumps({"type": "custom-title", "customTitle": restored, "sessionId": s["id"]}, separators=(",", ":"),
+                                   ensure_ascii=False) + "\n")
+            if fix["registry"]:
+                f, o = reg[s["id"]]
+                o["title"] = restored[:120]
+                save_json(f, o)
+    return fixes
 
 
 def retitle_claude_desktop(claude, state, pairs_only=True):
@@ -727,6 +785,49 @@ def pair_status(pair, cs, cd):
     return "conflict"
 
 
+def codex_import_map():
+    """Codex Desktop's own auto-import records: codex thread id -> Claude session id it was imported from."""
+    recs = load_json(os.path.join(CODEX_DIR, "external_agent_session_imports.json"), {}).get("records", [])
+    out = {}
+    for r in recs:
+        did = r.get("imported_thread_id")
+        src = os.path.basename(r.get("source_path", ""))
+        if did and src.endswith(".jsonl"):
+            out[did] = src[:-6]
+    return out
+
+
+def find_echoes(state, codex_ids=None):
+    """Codex threads that are Codex Desktop re-imports of a Claude session that is already paired with a
+    different Codex thread (typically a Claude copy this engine made of a Codex thread). Returns
+    codex id -> pair id. Echoes must never be paired, synced or copied again, or the two apps ping-pong."""
+    by_claude = {p["claude_id"]: pid for pid, p in state["pairs"].items()}
+    paired_codex = {p["codex_id"] for p in state["pairs"].values()}
+    out = {}
+    for did, cid in codex_import_map().items():
+        if did in paired_codex or cid not in by_claude:
+            continue
+        if codex_ids is not None and did not in codex_ids:
+            continue
+        out[did] = by_claude[cid]
+    return out
+
+
+def has_counterpart(state, side, sid):
+    """True when a session already has (or is) a copy on the other side, so creating one would duplicate it."""
+    for p in state["pairs"].values():
+        if (side == "claude" and p["claude_id"] == sid) or (side == "codex" and p["codex_id"] == sid):
+            return True
+    imports = codex_import_map()
+    if side == "codex":
+        if sid in imports:                      # Codex already imported it from a Claude session
+            return True
+    else:
+        if sid in imports.values():             # Codex already has an import of this Claude session
+            return True
+    return False
+
+
 def build_view(state, claude, codex):
     cmap = {s["id"]: s for s in claude}
     dmap = {s["id"]: s for s in codex}
@@ -739,14 +840,21 @@ def build_view(state, claude, codex):
             cs["imported"] = True
         paired_c.add(p["claude_id"]); paired_d.add(p["codex_id"])
         st = pair_status(p, cs, cd)
-        pairs.append({"pair_id": pid, "status": st, "claude": cs, "codex": cd,
+        missing_side = None if st != "missing" else ("both" if cs is None and cd is None else ("claude" if cs is None else "codex"))
+        pairs.append({"pair_id": pid, "status": st, "claude": cs, "codex": cd, "missing_side": missing_side,
                       "synced_claude_turns": p.get("synced_claude_turns", 0), "synced_codex_turns": p.get("synced_codex_turns", 0),
                       "last_sync": p.get("last_sync"), "origin": p.get("origin"),
                       "claude_active": p["claude_id"] in active_c, "codex_active": p["codex_id"] in active_d,
                       "title": (cs or cd or {}).get("title", ""), "cwd": (cs or cd or {}).get("cwd", "")})
     ign_c, ign_d = set(state["ignored"].get("claude", [])), set(state["ignored"].get("codex", []))
+    echo_map = find_echoes(state, set(dmap))
+    echoes = []
+    for did, pid in echo_map.items():
+        s = dict(dmap[did]); s["echo_of"] = pid
+        echoes.append(s)
     unpaired = {"claude": [s for s in claude if s["id"] not in paired_c and s["id"] not in ign_c],
-                "codex": [s for s in codex if s["id"] not in paired_d and s["id"] not in ign_d and not s.get("archived")]}
+                "codex": [s for s in codex if s["id"] not in paired_d and s["id"] not in ign_d
+                          and s["id"] not in echo_map and not s.get("archived")]}
     for s in unpaired["claude"]:
         s["active"] = s["id"] in active_c
     for s in unpaired["codex"]:
@@ -754,7 +862,8 @@ def build_view(state, claude, codex):
     pairs.sort(key=lambda p: max(ms_from_iso((p["claude"] or {}).get("last_activity")), ms_from_iso((p["codex"] or {}).get("last_activity"))), reverse=True)
     counts = collections.Counter(p["status"] for p in pairs)
     return {"generated_at": now_iso(), "pairs": pairs, "unpaired": unpaired, "counts": dict(counts),
-            "totals": {"claude": len(claude), "codex": len(codex), "pairs": len(pairs)}}
+            "echoes": echoes,
+            "totals": {"claude": len(claude), "codex": len(codex), "pairs": len(pairs), "echoes": len(echoes)}}
 
 
 def bootstrap(state, claude, codex):
@@ -784,6 +893,30 @@ def bootstrap(state, claude, codex):
     return added
 
 
+def recreate_missing(state, pair_id, claude, codex):
+    """A pair lost one side (thread deleted in Codex, or session file removed in Claude): rebuild that side
+    from the surviving one and point the pair at the new copy."""
+    p = state["pairs"].get(pair_id)
+    if not p:
+        raise RuntimeError("unknown pair " + pair_id)
+    cs = next((s for s in claude if s["id"] == p["claude_id"]), None)
+    cd = next((s for s in codex if s["id"] == p["codex_id"]), None)
+    if cs and cd:
+        raise RuntimeError("both sides exist; nothing to recreate")
+    if not cs and not cd:
+        raise RuntimeError("both sides are gone; unlink this pair instead")
+    del state["pairs"][pair_id]
+    try:
+        if cs:
+            path = create_codex_from_claude(cs, state)
+            return {"recreated": "codex", "path": path, "pair_id": cs["id"]}
+        path = create_claude_from_codex(cd, state)
+        return {"recreated": "claude", "path": path, "pair_id": cd["id"]}
+    except Exception:
+        state["pairs"][pair_id] = p      # leave the pair as it was
+        raise
+
+
 def do_sync(state, pair_id, claude, codex, prefer="both", force=False):
     p = state["pairs"].get(pair_id)
     if not p:
@@ -807,20 +940,20 @@ def do_sync(state, pair_id, claude, codex, prefer="both", force=False):
     push_c2d = st == "claude_newer" or (st == "conflict" and prefer in ("claude", "both"))
     push_d2c = st == "codex_newer" or (st == "conflict" and prefer in ("codex", "both"))
     active_c, active_d = claude_active_ids(), codex_active_ids()
-    if push_c2d:
-        if not force and (cd["id"] in active_d or recently_written(cd["path"])):
-            raise RuntimeError("Codex thread is open or was just written; try again later")
-        turns = claude_turns(cs["path"])[p["synced_claude_turns"]:]
-        if turns:
-            append_to_codex(cd, turns)
-            result["pushed_to_codex"] = len(turns)
-    if push_d2c:
-        if not force and (cs["id"] in active_c or recently_written(cs["path"])):
-            raise RuntimeError("Claude session is open or was just written; try again later")
-        turns = codex_turns(cd["id"])[p["synced_codex_turns"]:]
-        if turns:
-            append_to_claude(cs, turns)
-            result["pushed_to_claude"] = len(turns)
+    # Check both guards and read both deltas BEFORE writing anything, so a merge never echoes
+    # the turns it just appended to one side back into the other.
+    if push_c2d and not force and (cd["id"] in active_d or recently_written(cd["path"])):
+        raise RuntimeError("Codex thread is open or was just written; try again later")
+    if push_d2c and not force and (cs["id"] in active_c or recently_written(cs["path"])):
+        raise RuntimeError("Claude session is open or was just written; try again later")
+    c2d_turns = claude_turns(cs["path"])[p["synced_claude_turns"]:] if push_c2d else []
+    d2c_turns = codex_turns(cd["id"])[p["synced_codex_turns"]:] if push_d2c else []
+    if c2d_turns:
+        append_to_codex(cd, c2d_turns)
+        result["pushed_to_codex"] = len(c2d_turns)
+    if d2c_turns:
+        append_to_claude(cs, d2c_turns)
+        result["pushed_to_claude"] = len(d2c_turns)
     # re-count both sides after writing
     p["synced_claude_turns"] = parse_claude_file(cs["path"])["turns"]
     p["synced_codex_turns"] = sum(parse_codex_segment(f)["turns"] for f in codex_segments(cd["id"]))
@@ -834,11 +967,12 @@ def do_sync(state, pair_id, claude, codex, prefer="both", force=False):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["scan", "bootstrap", "sync", "sync-all", "create", "link", "unlink", "ignore", "open",
-                                    "register", "register-all", "retitle"])
+                                    "register", "register-all", "retitle", "recreate", "fix-titles"])
     ap.add_argument("--pair"); ap.add_argument("--prefer", default="ask", choices=["ask", "claude", "codex", "both"])
     ap.add_argument("--from", dest="src", choices=["claude", "codex"]); ap.add_argument("--id")
     ap.add_argument("--claude"); ap.add_argument("--codex"); ap.add_argument("--side", choices=["claude", "codex"])
     ap.add_argument("--force", action="store_true"); ap.add_argument("--pretty", action="store_true")
+    ap.add_argument("--apply", action="store_true", help="fix-titles: write the fixes (default is a dry run)")
     ap.add_argument("--all", action="store_true", help="register-all: include sessions that did not come from Codex")
     a = ap.parse_args()
 
@@ -869,6 +1003,10 @@ def main():
             save_json(STATE_FILE, state)
             out = {"results": results}
         elif a.cmd == "create":
+            if a.src == "codex" and a.id in find_echoes(state):
+                raise RuntimeError("this Codex thread is a re-import of a session that is already synced; not copying it again")
+            if has_counterpart(state, a.src, a.id) and not a.force:
+                raise RuntimeError("this session already has a counterpart on the other side (use link, or --force)")
             if a.src == "claude":
                 s = next((x for x in claude if x["id"] == a.id), None)
                 if not s:
@@ -919,6 +1057,12 @@ def main():
                 if lid:
                     done.append(s["id"])
             out = {"registered": len(done), "ids": done}
+        elif a.cmd == "fix-titles":
+            fixes = fix_titles(claude, state, apply=a.apply)
+            out = {"applied": a.apply, "count": len(fixes), "fixes": fixes}
+        elif a.cmd == "recreate":
+            out = recreate_missing(state, a.pair, claude, codex)
+            save_json(STATE_FILE, state)
         elif a.cmd == "retitle":
             ch = retitle_claude_desktop(claude, state)
             out = {"retitled": len(ch), "items": [{"id": i, "title": t} for i, t in ch]}

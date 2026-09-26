@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "iterate/**"]
+  pull_request:
+
+jobs:
+  engine-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Engine tests (synthetic HOME, stdlib only)
+        run: python3 -m unittest discover -s engine/tests -v
+
+  app-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Engine tests on the macOS system Python (the fallback most users get)
+        run: /usr/bin/python3 --version && /usr/bin/python3 -m unittest discover -s engine/tests -v
+      - name: Install xcodegen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build (unsigned)
+        run: |
+          xcodebuild -project SessionSync.xcodeproj -scheme SessionSync -configuration Release \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build

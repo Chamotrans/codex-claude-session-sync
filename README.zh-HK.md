@@ -10,9 +10,11 @@
 - 自動同步：定時掃描加上監察兩個工具嘅 session 資料夾。使用中或者啱啱寫入嘅對話永遠唔會被觸碰。
 - 一鍵建立副本：只喺 Claude 存在嘅對話可以生成 Codex thread，反之亦然。
 - 同步後嘅對話會出現喺兩個 app 嘅側欄（Codex Desktop 同 Claude desktop app）。
+- 認得 Codex Desktop 對已同步對話嘅重複匯入（「重複匯入」），永遠唔會同步或者複製佢哋。
+- 配對其中一邊被刪除（Codex 刪咗 thread、Claude 刪咗 session）時會顯示係邊一邊，並可以重建。
 - 附帶批量匯入工具，可以將整個 Codex 歷史搬入 Claude Code（`engine/codex2claude.py`）。
 
-> 狀態：個人工具，按現狀發佈。喺 macOS 27、Claude Code 2.1、Codex CLI 0.153 / Codex Desktop 測試過。App 界面目前係繁體中文（廣東話）。
+> 狀態：個人工具，按現狀發佈。喺 macOS 27、Claude Code 2.1、Codex CLI 0.153 / Codex Desktop 測試過。App 界面會跟隨 macOS 語言：English、繁體中文（廣東話）或簡體中文。
 
 ## 安裝
 
@@ -28,7 +30,13 @@ git clone https://github.com/Chamotrans/codex-claude-session-sync.git
 cd codex-claude-session-sync && ./build.sh
 ```
 
-`build.sh` 會生成 Xcode project、編譯、清走令 Xcode 簽名步驟失敗嘅 `com.apple.provenance` 屬性、ad-hoc 簽名並啟動 app。
+`build.sh` 會生成 Xcode project、無簽名編譯、清走 `com.apple.provenance` 屬性、ad-hoc 簽名並啟動 app。`./build.sh --release` 會用 Release 設定編譯並打包 `dist/Codex-Claude-Session-Sync-<version>.zip`（唔會啟動）；`--no-open` 唔啟動。
+
+執行引擎測試（只用標準庫，用臨時 HOME，唔會碰你嘅 session）：
+
+```bash
+python3 -m unittest discover -s engine/tests
+```
 
 ## 第一次使用
 
@@ -65,9 +73,15 @@ python3 engine/sessionsync.py create --from claude --id ID   # 或 --from codex
 python3 engine/sessionsync.py link --claude ID --codex ID
 python3 engine/sessionsync.py register-all [--all]       # Claude desktop 側欄登記
 python3 engine/sessionsync.py retitle                    # Claude 側改用 Codex 生成嘅標題
+python3 engine/sessionsync.py recreate --pair ID         # 重建配對中被刪除嘅一邊
+python3 engine/sessionsync.py fix-titles [--apply]       # 還原被錯加「[Codex] 」嘅 Claude 對話標題
 python3 engine/sessionsync.py open --side codex --id ID  # 印出 resume 指令
 python3 engine/codex2claude.py [--dry-run] [--force]     # 將全部 Codex session 批量匯入 Claude Code
 ```
+
+## Codex Desktop 重複匯入
+
+Codex Desktop 本身會自動匯入 Claude Code 對話（`~/.codex/config.toml` 入面嘅 `external-agent-import-sync-enabled`），連本 app 由 Codex thread 建立嘅 Claude 副本都會匯入，令同一個對話喺 Codex 多咗一個 thread。App 會將佢哋列喺「重複匯入」，永遠唔會處理；你可以喺 Codex 封存。如果想只由本 app 做橋樑，可以設 `external-agent-import-sync-enabled = false`。
 
 ## 限制
 

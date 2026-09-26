@@ -15,6 +15,9 @@ struct SessionInfo: Codable, Identifiable, Hashable {
     var imported: Bool?
     var archived: Bool?
     var inDesktop: Bool?
+    /// Codex only: set when this thread is Codex Desktop's re-import of an already-synced session (pair id).
+    var echoOf: String?
+    var isEcho: Bool { echoOf != nil }
 
     /// Claude sessions only: true when the Claude desktop app's sidebar knows about this session.
     var isInDesktopSidebar: Bool { inDesktop ?? true }
@@ -30,15 +33,23 @@ enum PairStatus: String, Codable, CaseIterable {
     case conflict
     case missing
     case rebased
+    case unknown
+
+    /// Unknown values from a newer engine decode as `.unknown` instead of failing the whole scan.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = PairStatus(rawValue: raw) ?? .unknown
+    }
 
     var label: String {
         switch self {
-        case .inSync: return "已同步"
-        case .claudeNewer: return "Claude 較新"
-        case .codexNewer: return "Codex 較新"
-        case .conflict: return "衝突"
-        case .missing: return "缺少一邊"
-        case .rebased: return "需重設基準"
+        case .inSync: return String(localized: "In sync")
+        case .claudeNewer: return String(localized: "Claude newer")
+        case .codexNewer: return String(localized: "Codex newer")
+        case .conflict: return String(localized: "Conflict")
+        case .missing: return String(localized: "One side missing")
+        case .rebased: return String(localized: "Needs rebase")
+        case .unknown: return String(localized: "Unknown")
         }
     }
 
@@ -50,6 +61,7 @@ struct PairInfo: Codable, Identifiable, Hashable {
     var status: PairStatus
     var claude: SessionInfo?
     var codex: SessionInfo?
+    var missingSide: String?
     var syncedClaudeTurns: Int
     var syncedCodexTurns: Int
     var lastSync: String?
@@ -77,6 +89,7 @@ struct Totals: Codable, Hashable {
     var claude: Int
     var codex: Int
     var pairs: Int
+    var echoes: Int?
 }
 
 struct ScanResult: Codable, Hashable {
@@ -85,6 +98,7 @@ struct ScanResult: Codable, Hashable {
     var unpaired: Unpaired
     var counts: [String: Int]
     var totals: Totals
+    var echoes: [SessionInfo]?
 }
 
 struct SyncResult: Codable {
@@ -164,16 +178,17 @@ enum SyncRow: Identifiable, Hashable {
 }
 
 enum RowFilter: String, CaseIterable, Identifiable {
-    case all, needsSync, conflicts, onlyClaude, onlyCodex, inSync
+    case all, needsSync, conflicts, onlyClaude, onlyCodex, inSync, echoes
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .all: return "全部"
-        case .needsSync: return "待同步"
-        case .conflicts: return "衝突"
-        case .onlyClaude: return "只有 Claude"
-        case .onlyCodex: return "只有 Codex"
-        case .inSync: return "已同步"
+        case .all: return String(localized: "All")
+        case .needsSync: return String(localized: "Needs sync")
+        case .conflicts: return String(localized: "Conflicts")
+        case .onlyClaude: return String(localized: "Only in Claude")
+        case .onlyCodex: return String(localized: "Only in Codex")
+        case .inSync: return String(localized: "In sync")
+        case .echoes: return String(localized: "Re-imports")
         }
     }
     var symbol: String {
@@ -184,6 +199,7 @@ enum RowFilter: String, CaseIterable, Identifiable {
         case .onlyClaude: return "c.circle"
         case .onlyCodex: return "x.circle"
         case .inSync: return "checkmark.circle"
+        case .echoes: return "arrow.triangle.branch"
         }
     }
 }

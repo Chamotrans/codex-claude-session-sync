@@ -5,9 +5,16 @@ import Foundation
 final class Engine {
     static let shared = Engine()
 
+    /// Python interpreter: the user's setting, else the first real python3 we can find. /usr/bin/python3 is the
+    /// last resort because on a Mac without the Command Line Tools it is only an installer stub.
     var pythonPath: String {
-        UserDefaults.standard.string(forKey: "pythonPath").flatMap { $0.isEmpty ? nil : $0 } ?? "/usr/bin/env"
+        if let custom = UserDefaults.standard.string(forKey: "pythonPath"), !custom.isEmpty { return custom }
+        let candidates = ["/opt/homebrew/bin/python3", "/usr/local/bin/python3",
+                          "/Library/Frameworks/Python.framework/Versions/Current/bin/python3", "/usr/bin/python3"]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? "/usr/bin/python3"
     }
+
+    static let pythonHelp = String(localized: "No usable python3 found. Install the Xcode Command Line Tools (run xcode-select --install in Terminal) or Homebrew Python (brew install python), then set the python3 path in Settings.")
 
     var scriptURL: URL {
         if let custom = UserDefaults.standard.string(forKey: "enginePath"), !custom.isEmpty {
@@ -32,28 +39,35 @@ final class Engine {
         return try await withCheckedThrowingContinuation { cont in
             DispatchQueue.global(qos: .userInitiated).async {
                 let p = Process()
-                if python == "/usr/bin/env" {
-                    p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                    p.arguments = ["python3", script] + args
-                } else {
-                    p.executableURL = URL(fileURLWithPath: python)
-                    p.arguments = [script] + args
-                }
+                p.executableURL = URL(fileURLWithPath: python)
+                p.arguments = [script] + args
                 var env = ProcessInfo.processInfo.environment
                 env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:" + (env["PATH"] ?? "")
                 env["PYTHONIOENCODING"] = "utf-8"
+                env["PYTHONDONTWRITEBYTECODE"] = "1"
                 p.environment = env
                 let out = Pipe(), err = Pipe()
                 p.standardOutput = out
                 p.standardError = err
+                guard FileManager.default.isExecutableFile(atPath: python) else {
+                    cont.resume(throwing: Failure(message: Engine.pythonHelp))
+                    return
+                }
                 do {
                     try p.run()
                 } catch {
-                    cont.resume(throwing: Failure(message: "無法啟動引擎：\(error.localizedDescription)"))
+                    cont.resume(throwing: Failure(message: String(localized: "Could not start the engine: \(error.localizedDescription)") + "\n" + Engine.pythonHelp))
                     return
                 }
+                // Drain stderr concurrently so a chatty engine can never block on a full pipe.
+                var errData = Data()
+                let errDone = DispatchSemaphore(value: 0)
+                DispatchQueue.global(qos: .utility).async {
+                    errData = err.fileHandleForReading.readDataToEndOfFile()
+                    errDone.signal()
+                }
                 let data = out.fileHandleForReading.readDataToEndOfFile()
-                let errData = err.fileHandleForReading.readDataToEndOfFile()
+                errDone.wait()
                 p.waitUntilExit()
                 if let e = try? JSONDecoder().decode(EngineError.self, from: data) {
                     cont.resume(throwing: Failure(message: e.error))
@@ -61,7 +75,11 @@ final class Engine {
                 }
                 if p.terminationStatus != 0 {
                     let msg = String(data: errData, encoding: .utf8) ?? ""
-                    cont.resume(throwing: Failure(message: "引擎錯誤 (\(p.terminationStatus))：\(msg.suffix(400))"))
+                    if msg.contains("xcode-select") || msg.contains("developer tools") || msg.contains("CommandLineTools") {
+                        cont.resume(throwing: Failure(message: Engine.pythonHelp))
+                    } else {
+                        cont.resume(throwing: Failure(message: String(localized: "Engine error (\(Int(p.terminationStatus))): \(String(msg.suffix(400)))")))
+                    }
                     return
                 }
                 cont.resume(returning: data)
@@ -76,7 +94,7 @@ final class Engine {
             return try dec.decode(type, from: data)
         } catch {
             let s = String(data: data.prefix(300), encoding: .utf8) ?? ""
-            throw Failure(message: "解析引擎輸出失敗：\(error.localizedDescription)\n\(s)")
+            throw Failure(message: String(localized: "Could not read the engine output: \(error.localizedDescription)") + "\n" + s)
         }
     }
 
@@ -102,6 +120,12 @@ final class Engine {
 
     func create(from side: String, id: String) async throws -> CreateResult {
         try decode(CreateResult.self, try await run(["create", "--from", side, "--id", id]))
+    }
+
+    struct RecreateResult: Decodable { var recreated: String; var pairId: String }
+
+    func recreate(pair: String) async throws -> RecreateResult {
+        try decode(RecreateResult.self, try await run(["recreate", "--pair", pair]))
     }
 
     func link(claude: String, codex: String) async throws {

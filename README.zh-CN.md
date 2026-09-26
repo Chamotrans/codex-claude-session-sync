@@ -10,9 +10,11 @@
 - 自动同步：定时扫描加上监听两个工具的 session 目录。正在使用或刚写入的对话永远不会被触碰。
 - 一键创建副本：只存在于 Claude 的对话可以生成 Codex thread，反之亦然。
 - 同步后的对话会出现在两个 app 的侧栏中（Codex Desktop 和 Claude 桌面版）。
+- 识别 Codex Desktop 对已同步对话的重复导入（"重复导入"），永远不会同步或复制它们。
+- 配对的某一边被删除（Codex 删除了 thread、Claude 删除了 session）时会显示是哪一边，并可以重建。
 - 附带批量导入工具，可把整个 Codex 历史迁入 Claude Code（`engine/codex2claude.py`）。
 
-> 状态：个人工具，按现状发布。在 macOS 27、Claude Code 2.1、Codex CLI 0.153 / Codex Desktop 上测试过。App 界面目前为繁体中文（粤语）。
+> 状态：个人工具，按现状发布。在 macOS 27、Claude Code 2.1、Codex CLI 0.153 / Codex Desktop 上测试过。App 界面跟随 macOS 语言：English、繁体中文（粤语）或简体中文。
 
 ## 安装
 
@@ -28,7 +30,13 @@ git clone https://github.com/Chamotrans/codex-claude-session-sync.git
 cd codex-claude-session-sync && ./build.sh
 ```
 
-`build.sh` 会生成 Xcode 工程、编译、清除导致 Xcode 签名步骤失败的 `com.apple.provenance` 属性、ad-hoc 签名并启动 app。
+`build.sh` 会生成 Xcode 工程、无签名编译、清除 `com.apple.provenance` 属性、ad-hoc 签名并启动 app。`./build.sh --release` 以 Release 配置编译并打包 `dist/Codex-Claude-Session-Sync-<version>.zip`（不启动）；`--no-open` 不启动。
+
+运行引擎测试（仅标准库，使用临时 HOME，不会触碰你的 session）：
+
+```bash
+python3 -m unittest discover -s engine/tests
+```
 
 ## 首次使用
 
@@ -65,9 +73,15 @@ python3 engine/sessionsync.py create --from claude --id ID   # 或 --from codex
 python3 engine/sessionsync.py link --claude ID --codex ID
 python3 engine/sessionsync.py register-all [--all]       # Claude 桌面版侧栏登记
 python3 engine/sessionsync.py retitle                    # Claude 侧改用 Codex 生成的标题
+python3 engine/sessionsync.py recreate --pair ID         # 重建配对中被删除的一边
+python3 engine/sessionsync.py fix-titles [--apply]       # 还原被误加"[Codex] "的 Claude 对话标题
 python3 engine/sessionsync.py open --side codex --id ID  # 打印 resume 命令
 python3 engine/codex2claude.py [--dry-run] [--force]     # 将全部 Codex session 批量导入 Claude Code
 ```
+
+## Codex Desktop 重复导入
+
+Codex Desktop 自身会自动导入 Claude Code 对话（`~/.codex/config.toml` 中的 `external-agent-import-sync-enabled`），连本 app 从 Codex thread 创建的 Claude 副本也会导入，使同一对话在 Codex 多出一个 thread。App 会把它们列在"重复导入"中，永远不会处理；你可以在 Codex 中归档。如果希望只由本 app 作为桥梁，可设置 `external-agent-import-sync-enabled = false`。
 
 ## 限制
 

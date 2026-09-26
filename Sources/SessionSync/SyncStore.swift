@@ -42,6 +42,7 @@ final class SyncStore: ObservableObject {
         var all: [SyncRow] = scan.pairs.map { .pair($0) }
         all += scan.unpaired.claude.map { .only($0) }
         all += scan.unpaired.codex.map { .only($0) }
+        if filter == .echoes { all = (scan.echoes ?? []).map { .only($0) } }
         all = all.filter { row in
             switch filter {
             case .all: return true
@@ -60,6 +61,8 @@ final class SyncStore: ObservableObject {
             case .inSync:
                 if case .pair(let p) = row { return p.status == .inSync }
                 return false
+            case .echoes:
+                return true
             }
         }
         if !search.isEmpty {
@@ -78,6 +81,7 @@ final class SyncStore: ObservableObject {
         case .onlyClaude: return scan.unpaired.claude.count
         case .onlyCodex: return scan.unpaired.codex.count
         case .inSync: return scan.pairs.filter { $0.status == .inSync }.count
+        case .echoes: return scan.echoes?.count ?? 0
         }
     }
 
@@ -103,7 +107,7 @@ final class SyncStore: ObservableObject {
     }
 
     func refresh(bootstrap: Bool = false) {
-        perform(bootstrap ? "正在配對…" : "正在掃描…") { [self] in
+        perform(bootstrap ? String(localized: "Pairing…") : String(localized: "Scanning…")) { [self] in
             let result = bootstrap ? try await Engine.shared.bootstrap() : try await Engine.shared.scan()
             scan = result
             lastRefresh = Date()
@@ -117,7 +121,7 @@ final class SyncStore: ObservableObject {
             pendingConflict = pair
             return
         }
-        perform("同步中：\(pair.title)") { [self] in
+        perform(String(localized: "Syncing: \(pair.title)")) { [self] in
             let r = try await Engine.shared.sync(pair: pair.pairId, prefer: prefer)
             scan = try await Engine.shared.scan()
             lastRefresh = Date()
@@ -126,7 +130,7 @@ final class SyncStore: ObservableObject {
     }
 
     func syncAll() {
-        perform("同步全部…") { [self] in
+        perform(String(localized: "Syncing all…")) { [self] in
             let r = try await Engine.shared.syncAll()
             scan = try await Engine.shared.scan()
             lastRefresh = Date()
@@ -134,56 +138,65 @@ final class SyncStore: ObservableObject {
             for x in r.results {
                 if let e = x.error { msgs.append("\(x.pairId.prefix(8)): \(e)") } else { msgs.append(describe(x, title: String(x.pairId.prefix(8)))) }
             }
-            return msgs.isEmpty ? "全部已同步，冇嘢要推。" : msgs.joined(separator: "\n")
+            return msgs.isEmpty ? String(localized: "Everything is in sync; nothing to push.") : msgs.joined(separator: "\n")
         }
     }
 
     func create(from session: SessionInfo) {
-        perform("建立副本：\(session.title)") { [self] in
+        perform(String(localized: "Creating copy: \(session.title)")) { [self] in
             let r = try await Engine.shared.create(from: session.side, id: session.id)
             scan = try await Engine.shared.scan()
             lastRefresh = Date()
-            return "已喺 \(r.side == "codex" ? "Codex" : "Claude") 建立副本：\(session.title)"
+            return r.side == "codex" ? String(localized: "Created a Codex copy: \(session.title)") : String(localized: "Created a Claude copy: \(session.title)")
+        }
+    }
+
+    func recreate(_ pair: PairInfo) {
+        perform(String(localized: "Recreating the missing side…")) { [self] in
+            let r = try await Engine.shared.recreate(pair: pair.pairId)
+            scan = try await Engine.shared.scan()
+            lastRefresh = Date()
+            return r.recreated == "codex" ? String(localized: "Recreated in Codex: \(pair.title)") : String(localized: "Recreated in Claude: \(pair.title)")
         }
     }
 
     func ignore(_ session: SessionInfo) {
-        perform("隱藏…") { [self] in
+        perform(String(localized: "Hiding…")) { [self] in
             try await Engine.shared.ignore(side: session.side, id: session.id)
             scan = try await Engine.shared.scan()
-            return "已隱藏：\(session.title)"
+            return String(localized: "Hidden: \(session.title)")
         }
     }
 
     func unlink(_ pair: PairInfo) {
-        perform("解除配對…") { [self] in
+        perform(String(localized: "Unlinking…")) { [self] in
             try await Engine.shared.unlink(pair: pair.pairId)
             scan = try await Engine.shared.scan()
-            return "已解除配對：\(pair.title)"
+            return String(localized: "Unlinked: \(pair.title)")
         }
     }
 
     func link(claude: SessionInfo, codex: SessionInfo) {
-        perform("配對中…") { [self] in
+        perform(String(localized: "Linking…")) { [self] in
             try await Engine.shared.link(claude: claude.id, codex: codex.id)
             scan = try await Engine.shared.scan()
-            return "已配對：\(claude.title) ↔ \(codex.title)"
+            return String(localized: "Linked: \(claude.title) ↔ \(codex.title)")
         }
     }
 
     func registerInDesktop(_ session: SessionInfo) {
-        perform("登記到 Claude Desktop…") { [self] in
+        perform(String(localized: "Adding to the Claude desktop sidebar…")) { [self] in
             let r = try await Engine.shared.register(claudeId: session.id)
             scan = try await Engine.shared.scan()
-            return (r.already ?? false) ? "\(session.title)：側欄已經有。" : "已登記到 Claude Desktop 側欄：\(session.title)（如未出現請重開 Claude app）"
+            return (r.already ?? false) ? String(localized: "\(session.title): already in the sidebar.") : String(localized: "Added to the Claude desktop sidebar: \(session.title). Restart the Claude app if it does not appear.")
         }
     }
 
     func registerAllInDesktop() {
-        perform("登記全部到 Claude Desktop…") { [self] in
+        perform(String(localized: "Adding all to the Claude desktop sidebar…")) { [self] in
             let r = try await Engine.shared.registerAll()
             scan = try await Engine.shared.scan()
-            return r.registered == 0 ? "所有 Claude 對話都已經喺側欄。" : "已登記 \(r.registered) 個對話到 Claude Desktop 側欄（如未出現請重開 Claude app）"
+            return r.registered == 0 ? String(localized: "All Claude conversations are already in the sidebar.") : String(localized: "Added \(r.registered) conversations to the Claude desktop sidebar. Restart the Claude app if they do not appear.")
         }
     }
 
@@ -200,7 +213,7 @@ final class SyncStore: ObservableObject {
                 let r = try await Engine.shared.openCommand(side: session.side, id: session.id)
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(r.command, forType: .string)
-                addLog("已複製指令：\(r.command)")
+                addLog(String(localized: "Copied command: \(r.command)"))
             } catch {
                 addLog(error.localizedDescription, isError: true)
             }
@@ -217,14 +230,14 @@ final class SyncStore: ObservableObject {
         var changed = false
         if !needs.isEmpty {
             if let r = try? await Engine.shared.syncAll() {
-                for x in r.results where x.error == nil { addLog("自動同步：" + describe(x, title: String(x.pairId.prefix(8)))); changed = true }
-                for x in r.results where x.error != nil { addLog("自動同步略過 \(x.pairId.prefix(8))：\(x.error ?? "")", isError: false) }
+                for x in r.results where x.error == nil { addLog(String(localized: "Auto sync: \(describe(x, title: String(x.pairId.prefix(8))))")); changed = true }
+                for x in r.results where x.error != nil { addLog(String(localized: "Auto sync skipped \(String(x.pairId.prefix(8))): \(x.error ?? "")"), isError: false) }
             }
         }
         if autoCreate {
             for s in scan.unpaired.claude + scan.unpaired.codex where s.active != true {
                 if let r = try? await Engine.shared.create(from: s.side, id: s.id) {
-                    addLog("自動建立 \(r.side == "codex" ? "Codex" : "Claude") 副本：\(s.title)")
+                    addLog(r.side == "codex" ? String(localized: "Auto-created a Codex copy: \(s.title)") : String(localized: "Auto-created a Claude copy: \(s.title)"))
                     changed = true
                 }
             }
@@ -234,10 +247,10 @@ final class SyncStore: ObservableObject {
 
     private func describe(_ r: SyncResult, title: String) -> String {
         let toCodex = r.pushedToCodex ?? 0, toClaude = r.pushedToClaude ?? 0
-        if toCodex == 0 && toClaude == 0 { return "\(title)：已經係最新。" }
+        if toCodex == 0 && toClaude == 0 { return String(localized: "\(title): already up to date.") }
         var parts: [String] = []
-        if toCodex > 0 { parts.append("Claude → Codex \(toCodex) 個回合") }
-        if toClaude > 0 { parts.append("Codex → Claude \(toClaude) 個回合") }
+        if toCodex > 0 { parts.append(String(localized: "Claude → Codex \(toCodex) turns")) }
+        if toClaude > 0 { parts.append(String(localized: "Codex → Claude \(toClaude) turns")) }
         return "\(title)：" + parts.joined(separator: "，")
     }
 

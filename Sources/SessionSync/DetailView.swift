@@ -21,7 +21,7 @@ struct DetailView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(row.title.isEmpty ? "(無標題)" : row.title).font(.title2.weight(.semibold)).textSelection(.enabled)
+            Text(row.title.isEmpty ? String(localized: "(untitled)") : row.title).font(.title2.weight(.semibold)).textSelection(.enabled)
             HStack(spacing: 8) {
                 StatusPill(row: row)
                 Text(row.projectName).foregroundStyle(.secondary)
@@ -45,23 +45,23 @@ struct DetailView: View {
 
     @ViewBuilder
     private func pairInfo(_ p: PairInfo) -> some View {
-        GroupBox("同步狀態") {
+        GroupBox("Sync status") {
             Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
                 GridRow {
-                    Text("上次同步").foregroundStyle(.secondary)
+                    Text("Last sync").foregroundStyle(.secondary)
                     Text(RelativeTime.full(ISO8601.parse(p.lastSync)))
                 }
                 GridRow {
-                    Text("同步基準").foregroundStyle(.secondary)
-                    Text("Claude \(p.syncedClaudeTurns) 回合 · Codex \(p.syncedCodexTurns) 回合")
+                    Text("Sync baseline").foregroundStyle(.secondary)
+                    Text("Claude \(p.syncedClaudeTurns) turns · Codex \(p.syncedCodexTurns) turns")
                 }
                 GridRow {
-                    Text("未同步").foregroundStyle(.secondary)
+                    Text("Not yet synced").foregroundStyle(.secondary)
                     Text(unsyncedText(p)).foregroundStyle(p.status == .inSync ? .green : .orange)
                 }
                 if let o = p.origin {
                     GridRow {
-                        Text("配對來源").foregroundStyle(.secondary)
+                        Text("Paired via").foregroundStyle(.secondary)
                         Text(originLabel(o))
                     }
                 }
@@ -73,22 +73,28 @@ struct DetailView: View {
 
     private func unsyncedText(_ p: PairInfo) -> String {
         switch p.status {
-        case .inSync: return "冇，兩邊一樣"
-        case .claudeNewer: return "Claude 有 \(p.claudeNewTurns) 個新回合未推去 Codex"
-        case .codexNewer: return "Codex 有 \(p.codexNewTurns) 個新回合未推去 Claude"
-        case .conflict: return "兩邊都有新回合（Claude \(p.claudeNewTurns)、Codex \(p.codexNewTurns)）"
-        case .missing: return "其中一邊搵唔到檔案"
-        case .rebased: return "有一邊嘅回合數少過基準，同步時會重設"
+        case .inSync: return String(localized: "Nothing, both sides match")
+        case .claudeNewer: return String(localized: "Claude has \(p.claudeNewTurns) new turns not yet in Codex")
+        case .codexNewer: return String(localized: "Codex has \(p.codexNewTurns) new turns not yet in Claude")
+        case .conflict: return String(localized: "Both sides have new turns (Claude \(p.claudeNewTurns), Codex \(p.codexNewTurns))")
+        case .missing:
+            switch p.missingSide {
+            case "codex": return String(localized: "The Codex thread was deleted. Recreate it from Claude, or unlink the pair.")
+            case "claude": return String(localized: "The Claude session was deleted. Recreate it from Codex, or unlink the pair.")
+            default: return String(localized: "Neither side exists any more. Unlink the pair.")
+            }
+        case .unknown: return String(localized: "The engine reported a status this app does not know. Update the app.")
+        case .rebased: return String(localized: "One side has fewer turns than the baseline; the next sync re-bases it")
         }
     }
 
     private func originLabel(_ o: String) -> String {
         switch o {
-        case "bootstrap_same_id": return "同一 ID（由 codex2claude 匯入）"
-        case "bootstrap_codex_import": return "Codex 自動匯入 Claude 對話"
-        case "created_codex": return "由 SessionSync 建立 Codex 副本"
-        case "created_claude": return "由 SessionSync 建立 Claude 副本"
-        case "manual": return "手動配對"
+        case "bootstrap_same_id": return String(localized: "Same id (imported by codex2claude)")
+        case "bootstrap_codex_import": return String(localized: "Codex auto-imported the Claude conversation")
+        case "created_codex": return String(localized: "Codex copy created by this app")
+        case "created_claude": return String(localized: "Claude copy created by this app")
+        case "manual": return String(localized: "Linked manually")
         default: return o
         }
     }
@@ -98,16 +104,25 @@ struct DetailView: View {
             switch row {
             case .pair(let p):
                 if p.status == .conflict {
-                    Button("解決衝突…") { store.pendingConflict = p }.buttonStyle(.borderedProminent)
+                    Button("Resolve Conflict…") { store.pendingConflict = p }.buttonStyle(.borderedProminent)
                 } else if p.status.needsAction {
-                    Button("立即同步") { store.syncPair(p) }.buttonStyle(.borderedProminent)
+                    Button("Sync Now") { store.syncPair(p) }.buttonStyle(.borderedProminent)
                 }
-                Button("解除配對") { store.unlink(p) }
+                if p.status == .missing && (p.missingSide == "claude" || p.missingSide == "codex") {
+                    Button(p.missingSide == "codex" ? "Recreate Codex Copy" : "Recreate Claude Copy") { store.recreate(p) }
+                        .buttonStyle(.borderedProminent)
+                }
+                Button("Unlink") { store.unlink(p) }
+            case .only(let s) where s.isEcho:
+                Label("Codex Desktop imported this conversation again. The original is already synced, so this copy is never synced or copied. You can archive it in Codex.",
+                      systemImage: "arrow.triangle.branch")
+                    .font(.callout).foregroundStyle(.secondary)
+                Button("Hide") { store.ignore(s) }
             case .only(let s):
-                Button(s.side == "claude" ? "喺 Codex 建立副本" : "喺 Claude 建立副本") { store.create(from: s) }
+                Button(s.side == "claude" ? "Create Codex Copy" : "Create Claude Copy") { store.create(from: s) }
                     .buttonStyle(.borderedProminent)
                     .disabled(s.active ?? false)
-                Button("隱藏") { store.ignore(s) }
+                Button("Hide") { store.ignore(s) }
             }
             Spacer()
         }
@@ -132,27 +147,27 @@ struct SideCard: View {
                     HStack {
                         Text(RelativeTime.full(s.lastActivityDate)).font(.headline)
                         if isNewer {
-                            Label("較新", systemImage: "arrow.up.circle.fill").font(.caption).foregroundStyle(.orange)
+                            Label("Newer", systemImage: "arrow.up.circle.fill").font(.caption).foregroundStyle(.orange)
                         }
                         if active {
-                            Label("使用中", systemImage: "circle.fill").font(.caption).foregroundStyle(.green)
+                            Label("Open", systemImage: "circle.fill").font(.caption).foregroundStyle(.green)
                         }
                     }
                     Text(RelativeTime.string(s.lastActivityDate)).font(.caption).foregroundStyle(.secondary)
                     Divider()
-                    row("回合", "\(s.turns)")
-                    row("大小", ByteCount.string(s.size))
+                    row("Turns", "\(s.turns)")
+                    row("Size", ByteCount.string(s.size))
                     row("ID", String(s.id.prefix(8)) + "…")
-                    row("目錄", s.cwd)
+                    row("Folder", s.cwd)
                     if s.side == "claude" && !s.isInDesktopSidebar {
-                        Label("未喺 Claude Desktop 側欄", systemImage: "sidebar.left")
+                        Label("Not in the Claude desktop sidebar", systemImage: "sidebar.left")
                             .font(.caption).foregroundStyle(.orange)
                     }
                     HStack {
-                        Button("複製 resume 指令") { store.copyResumeCommand(s) }
+                        Button("Copy Resume Command") { store.copyResumeCommand(s) }
                         Button("Finder") { store.revealInFinder(s) }
                         if s.side == "claude" && !s.isInDesktopSidebar {
-                            Button("登記到側欄") { store.registerInDesktop(s) }
+                            Button("Add to Sidebar") { store.registerInDesktop(s) }
                         }
                     }
                     .controlSize(.small)
@@ -162,7 +177,7 @@ struct SideCard: View {
             } else {
                 VStack(spacing: 6) {
                     Image(systemName: "questionmark.circle").font(.largeTitle).foregroundStyle(.tertiary)
-                    Text("\(name) 度未有呢個對話").foregroundStyle(.secondary)
+                    Text("Not in \(name) yet").foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, minHeight: 120)
             }
@@ -171,9 +186,9 @@ struct SideCard: View {
         }
     }
 
-    private func row(_ k: String, _ v: String) -> some View {
+    private func row(_ k: LocalizedStringKey, _ v: String) -> some View {
         HStack(alignment: .top) {
-            Text(k).foregroundStyle(.secondary).frame(width: 36, alignment: .leading)
+            Text(k).foregroundStyle(.secondary).frame(width: 52, alignment: .leading)
             Text(v).textSelection(.enabled).lineLimit(2)
         }
         .font(.callout)
